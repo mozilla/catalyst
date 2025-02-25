@@ -1,0 +1,25 @@
+{
+  "slug": "fetchpriority-release",
+
+  "histograms": [
+      "payload.processes.content.histograms.perf_page_load_time_ms",
+      "payload.processes.content.histograms.perf_first_contentful_paint_ms",
+      "payload.processes.content.histograms.perf_largest_contentful_paint_ms",
+      "payload.processes.content.histograms.perf_largest_contentful_paint_from_response_start_ms",
+      "metrics.timing_distribution.performance_pageload_fcp",
+      "metrics.timing_distribution.perf_largest_contentful_paint"
+  ],
+
+  "pageload_event_metrics": {
+    "fcp_time" : [0, 30000],
+    "load_time": [0, 30000],
+    "lcp_time": [0, 30000]
+  },
+
+  "segments": [
+    "All",
+    "Windows",
+    "Linux",
+    "Mac"
+  ]
+}

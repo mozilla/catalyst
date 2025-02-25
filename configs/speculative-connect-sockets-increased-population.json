@@ -1,0 +1,25 @@
+{
+  "slug": "speculative-connect-sockets-increased-population",
+
+  "histograms": [
+      "payload.processes.content.histograms.http_page_open_to_first_received",
+      "payload.processes.content.histograms.perf_page_load_time_ms",
+      "payload.processes.content.histograms.perf_page_load_time_from_responsestart_ms",
+      "payload.processes.content.histograms.perf_first_contentful_paint_ms",
+      "payload.processes.content.histograms.perf_first_contentful_paint_from_responsestart_ms"
+  ],
+
+  "pageload_event_metrics": {
+    "fcp_time" : [0, 10000],
+    "load_time": [0, 30000],
+    "response_time": [0, 10000],
+    "js_exec_time": [0, 10000]
+  },
+
+  "segments": [
+    "All",
+    "Windows",
+    "Linux",
+    "Mac"
+  ]
+}

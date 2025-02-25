@@ -1,0 +1,27 @@
+{
+  "slug": "impact-of-parallel-marking-on-android",
+
+  "histograms": [
+      "metrics.timing_distribution.performance_pageload_fcp",
+      "metrics.timing_distribution.perf_largest_contentful_paint",
+      "metrics.timing_distribution.javascript_gc_mark_time",
+      "metrics.timing_distribution.javascript_gc_minor_time",
+      "metrics.timing_distribution.javascript_gc_prepare_time",
+      "metrics.timing_distribution.javascript_gc_slice_time",
+      "metrics.timing_distribution.javascript_gc_sweep_time",
+      "metrics.timing_distribution.javascript_gc_total_time",
+      "metrics.timing_distribution.javascript_gc_compact_time",
+      "metrics.timing_distribution.javascript_gc_mark_roots_time"
+  ],
+
+  "pageload_event_metrics": {
+    "fcp_time" : [0, 30000],
+    "load_time": [0, 30000],
+    "response_time": [0, 30000],
+    "js_exec_time": [0, 30000]
+  },
+
+  "segments": [
+    "Android"
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "slug": "firefox_124_vs_firefox_125",
+
+  "histograms": [
+    "metrics.timing_distribution.performance_pageload_load_time",
+    "payload.processes.content.histograms.perf_page_load_time_ms",
+    "metrics.timing_distribution.performance_pageload_fcp",
+    "payload.processes.content.histograms.perf_first_contentful_paint_ms",
+    "metrics.timing_distribution.javascript_gc_minor_time",
+    "payload.processes.content.histograms.gc_minor_us",
+    "metrics.timing_distribution.javascript_gc_total_time",
+    "payload.processes.content.histograms.gc_ms"
+  ],
+
+  "branches": [
+    {
+     "name" : "Firefox124",
+     "startDate": "2024-01-22",
+     "endDate": "2024-02-29",
+     "channel": "nightly",
+     "version": 124,
+     "conditions": []
+    },
+    {
+     "name" : "Firefox125",
+     "startDate": "2024-02-19",
+     "endDate": "2024-03-05",
+     "channel": "nightly",
+     "version": 125,
+     "conditions": []
+    }
+  ],
+
+  "pageload_event_metrics": {
+    "fcp_time" : [0, 3000],
+    "load_time": [0, 10000],
+    "lcp_time": [0, 10000],
+    "response_time": [0, 3000],
+    "js_exec_time": [0, 3000]
+  },
+
+  "segments": [
+    "All",
+    "Windows",
+    "Linux",
+    "Mac"
+  ]
+}

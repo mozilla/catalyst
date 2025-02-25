@@ -1,0 +1,19 @@
+{
+  "slug": "fetchpriority-beta-followup",
+
+  "histograms": [
+  ],
+
+  "pageload_event_metrics": {
+    "fcp_time" : [0, 30000],
+    "lcp_time" : [0, 30000],
+    "load_time": [0, 30000]
+  },
+
+  "segments": [
+    "All",
+    "Windows",
+    "Linux",
+    "Mac"
+  ]
+}

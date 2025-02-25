@@ -1,0 +1,29 @@
+{
+  "slug": "macos-background-tab-power-savings-release",
+
+  "histograms": [
+    "payload.histograms.fx_new_window_ms",
+    "payload.histograms.fx_tab_switch_total_e10s_ms", 
+    "payload.histograms.fx_tab_switch_composite_e10s_ms", 
+    "payload.histograms.fx_tab_switch_spinner_visible_ms", 
+    "payload.histograms.fx_tab_switch_spinner_visible_long_ms",
+    "payload.histograms.memory_total",
+    "payload.processes.content.histograms.input_event_response_ms",
+    "payload.processes.content.histograms.cycle_collector_max_pause",
+    "payload.processes.content.histograms.gc_max_pause_ms_2",
+    "metrics.timing_distribution.performance_pageload_load_time",
+    "metrics.timing_distribution.performance_pageload_fcp",
+    "metrics.timing_distribution.perf_largest_contentful_paint"
+  ],
+
+  "pageload_event_metrics": {
+    "fcp_time" : [0, 30000],
+    "load_time": [0, 30000],
+    "lcp_time": [0, 30000],
+    "response_time": [0, 30000]
+  },
+
+  "segments": [
+    "Mac"
+  ]
+}

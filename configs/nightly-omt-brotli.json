@@ -1,0 +1,56 @@
+{
+  "slug": "nightly-omt-brotli",
+
+  "histograms": [
+      "payload.processes.content.histograms.perf_page_load_time_ms",
+      "payload.processes.content.histograms.perf_page_load_time_from_responsestart_ms",
+      "payload.processes.content.histograms.perf_first_contentful_paint_ms",
+      "payload.processes.content.histograms.perf_first_contentful_paint_from_responsestart_ms",
+      "payload.processes.content.histograms.perf_largest_contentful_paint_ms",
+      "payload.processes.content.histograms.perf_largest_contentful_paint_from_response_start_ms",
+      "payload.processes.content.histograms.time_to_response_start_ms",
+      "payload.processes.content.histograms.input_event_response_ms",
+      "payload.histograms.memory_total"
+  ],
+
+  "branches": [
+    {
+     "name" : "Before",
+     "startDate": "2024-03-06",
+     "endDate": "2024-03-20",
+     "channel": "nightly",
+     "legacy_conditions": [
+       "AND application.build_id < \"20240320095303\""
+     ],
+     "glean_conditions": [
+       "AND client_info.app_build < \"20240320095303\""
+     ]
+    },
+    {
+     "name" : "After",
+     "startDate": "2024-03-20",
+     "endDate": "2024-04-03",
+     "channel": "nightly",
+     "legacy_conditions": [
+       "AND application.build_id >= \"20240320095303\""
+     ],
+     "glean_conditions": [
+       "AND client_info.app_build >= \"20240320095303\""
+     ]
+    }
+  ],
+
+  "pageload_event_metrics": {
+    "fcp_time" : [0, 50000],
+    "load_time": [0, 50000],
+    "lcp_time": [0, 50000],
+    "response_time": [0, 50000]
+  },
+
+  "segments": [
+    "All",
+    "Windows",
+    "Linux",
+    "Mac"
+  ]
+}

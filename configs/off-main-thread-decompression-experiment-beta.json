@@ -1,0 +1,31 @@
+{
+  "slug": "off-main-thread-decompression-experiment-beta",
+
+  "histograms": [
+      "payload.processes.content.histograms.perf_page_load_time_ms",
+      "payload.processes.content.histograms.perf_page_load_time_from_responsestart_ms",
+      "payload.processes.content.histograms.perf_first_contentful_paint_ms",
+      "payload.processes.content.histograms.perf_first_contentful_paint_from_responsestart_ms",
+      "payload.processes.content.histograms.perf_largest_contentful_paint_ms",
+      "payload.processes.content.histograms.perf_largest_contentful_paint_from_response_start_ms",
+      "payload.processes.content.histograms.time_to_response_start_ms",
+      "payload.processes.content.histograms.input_event_response_ms",
+      "metrics.timing_distribution.performance_pageload_fcp",
+      "metrics.timing_distribution.perf_largest_contentful_paint",
+      "metrics.timing_distribution.performance_pageload_async_sheet_load"
+  ],
+
+  "pageload_event_metrics": {
+    "fcp_time" : [0, 10000],
+    "load_time": [0, 30000],
+    "lcp_time": [0, 30000],
+    "response_time": [0, 10000]
+  },
+
+  "segments": [
+    "All",
+    "Windows",
+    "Linux",
+    "Mac"
+  ]
+}

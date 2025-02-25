@@ -1,0 +1,41 @@
+{
+  "slug": "performance-metric-calibration-beta-dec-2024",
+
+  "histograms": [
+      "payload.processes.content.histograms.perf_page_load_time_ms",
+      "payload.processes.content.histograms.perf_page_load_time_from_responsestart_ms",
+      "payload.processes.content.histograms.perf_first_contentful_paint_ms",
+      "payload.processes.content.histograms.perf_first_contentful_paint_from_responsestart_ms",
+      "payload.processes.content.histograms.js_pageload_execution_ms",
+      "payload.processes.content.histograms.perf_largest_contentful_paint_ms",
+      "payload.processes.content.histograms.perf_largest_contentful_paint_from_response_start_ms",
+      "payload.processes.content.histograms.http_page_tls_handshake",
+      "payload.processes.content.histograms.http_sub_tls_handshake",
+      "payload.processes.content.histograms.http_page_open_to_first_sent",
+      "payload.processes.content.histograms.http_page_dns_issue_time",
+      "metrics.timing_distribution.network_dns_start",
+      "metrics.timing_distribution.network_dns_end",
+      "metrics.timing_distribution.networking_dns_lookup_time",
+      "metrics.timing_distribution.networking_transaction_wait_time",
+      "metrics.timing_distribution.network_tcp_connection",
+      "metrics.timing_distribution.network_tls_handshake",
+      "metrics.timing_distribution.networking_http_channel_page_open_to_first_sent",
+      "metrics.timing_distribution.networking_http_channel_sub_open_to_first_sent",
+      "metrics.timing_distribution.performance_pageload_fcp",
+      "metrics.timing_distribution.perf_largest_contentful_paint"
+  ],
+
+  "pageload_event_metrics": {
+    "fcp_time" : [0, 30000],
+    "load_time": [0, 30000],
+    "lcp_time": [0, 30000],
+    "response_time": [0, 30000]
+  },
+
+  "segments": [
+    "All",
+    "Windows",
+    "Linux",
+    "Mac"
+  ]
+}
