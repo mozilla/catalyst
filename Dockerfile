@@ -12,9 +12,9 @@ RUN apt-get update && apt-get install -y \
 
 # Create the conda environment and install python dependencies
 COPY requirements.txt .
-RUN conda create --name nimbusperf python=3.10 && \
-    conda run -n nimbusperf pip install --no-cache-dir -r requirements.txt
+RUN conda create --name catalyst python=3.10 && \
+    conda run -n catalyst pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 ENV BUCKET_URL="gs://moz-fx-data-prot-nonprod-c3a1-protodash/perf-reports"
-CMD ["conda", "run", "--no-capture-output", "-n", "nimbusperf", "/app/entry.sh"]
+CMD ["conda", "run", "--no-capture-output", "-n", "catalyst", "/app/entry.sh"]
