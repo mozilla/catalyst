@@ -1,0 +1,55 @@
+name: Catalyst Build and Deploy
+on:
+  push:
+    branches:
+    - main
+  pull_request:
+    branches:
+    - main
+jobs:
+  build:
+    permissions:
+      contents: read
+      deployments: write
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+    - name: restore_cache
+      uses: actions/cache@v3
+      with:
+        key: python-packages-v1-{{ .Branch }}-{{ checksum "requirements.txt" }}
+        path: venv/
+        restore-keys: |-
+          python-packages-v1-{{ .Branch }}-{{ checksum "requirements.txt" }}
+          python-packages-v1-{{ .Branch }}-
+          python-packages-v1-
+    # - name: PyTest
+    #   run: venv/bin/pytest --black --pydocstyle --ignore=catalyst/tests/integration/
+    # - name: isort
+    #   run: venv/bin/isort --check catalyst
+    # - name: flake8
+    #   run: venv/bin/flake8 catalyst
+    # - name: Mypy
+    #   run: venv/bin/mypy catalyst
+    - name: Build
+      run: |-
+        python3.10 -m venv venv/
+        venv/bin/pip install --progress-bar off --upgrade -r requirements.txt
+    - name: Build the Docker image
+      if: github.ref == 'refs/heads/main'
+      run: docker build . -t catalyst
+    - name: Push the Docker image to GAR
+      if: github.ref == 'refs/heads/main'
+      uses: mozilla-it/deploy-actions/docker-push@v3
+      with:
+        project_id: moz-fx-data-experiments
+        local_image: catalyst
+        image_repo_host: gcr.io
+        image_repo_path: moz-fx-data-experiments/catalyst
+        workload_identity_pool_project_number: ${{ vars.GCPV2_WORKLOAD_IDENTITY_POOL_PROJECT_NUMBER }}
+        
