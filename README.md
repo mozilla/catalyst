@@ -32,6 +32,8 @@ Catalyst is a python project designed for analyzing and generating performance r
 3. Create a config.  Examples can be found in `configs/`
 
 4. Run:
-   ```python generate-perf-report --config {experiment config}```
+   ```bash
+   python generate-perf-report --config {experiment config}
+   ```
 
 5. Open the report that is created at `reports/{slug}.html`
