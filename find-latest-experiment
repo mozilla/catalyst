@@ -12,17 +12,9 @@ default_histograms = [
   "metrics.timing_distribution.performance_pageload_load_time",
   "metrics.timing_distribution.perf_largest_contentful_paint",
 
-  "metrics.timing_distribution.networking_http_channel_sub_open_to_first_sent_https_rr",
-
-  "metrics.timing_distribution.javascript_gc_max_pause",
-  "metrics.timing_distribution.cycle_collector_max_pause",
-  "metrics.timing_distribution.cycle_collector_full",
-  "metrics.timing_distribution.dom_contentprocess_launch_total",
-
   "metrics.timing_distribution.perf_startup_cold_view_app_to_first_frame",
   "metrics.timing_distribution.perf_startup_cold_unknwn_app_to_first_frame",
   "metrics.timing_distribution.perf_startup_cold_main_app_to_first_frame",
-  "metrics.timing_distribution.perf_startup_application_on_create",
   "metrics.timing_distribution.geckoview_startup_runtime",
 
   "metrics.timing_distribution.performance_interaction_tab_switch_composite",
