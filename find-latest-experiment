@@ -11,16 +11,6 @@ default_histograms = [
   "metrics.timing_distribution.performance_pageload_fcp",
   "metrics.timing_distribution.performance_pageload_load_time",
   "metrics.timing_distribution.perf_largest_contentful_paint",
-
-  "metrics.timing_distribution.perf_startup_cold_view_app_to_first_frame",
-  "metrics.timing_distribution.perf_startup_cold_unknwn_app_to_first_frame",
-  "metrics.timing_distribution.perf_startup_cold_main_app_to_first_frame",
-  "metrics.timing_distribution.geckoview_startup_runtime",
-
-  "metrics.timing_distribution.performance_interaction_tab_switch_composite",
-  "metrics.timing_distribution.recent_synced_tabs_recent_synced_tab_time_to_load",
-  "metrics.timing_distribution.perf_awesomebar_search_engine_suggestions",
-  "metrics.timing_distribution.metrics_search_page_load_time",
 ]
 
 default_events = {
