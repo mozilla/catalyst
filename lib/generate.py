@@ -129,19 +129,6 @@ def generate_report(args):
       else:
         config['include_non_enrolled_branch'] = False
 
-      # Make control the first element if not already.
-      if "control" in config:
-        control = config["control"]
-        del config["control"]
-        if config["branches"][0]["name"] != control:
-          for i,b in enumerate(config["branches"]):
-            if b["name"] == control:
-              tmpFirst   = config["branches"][0]
-              tmpControl = config["branches"][i]
-              config["branches"][i] = tmpFirst
-              config["branches"][0] = tmpControl
-              break
-
     print("Using Config:")
     configStr = json.dumps(config, indent=2)
     print(configStr)

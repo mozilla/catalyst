@@ -140,8 +140,23 @@ def extractValuesFromAPI(api):
     values["endDate"] = now.strftime('%Y-%m-%d')
 
   values["branches"] = []
+
+  # If a referenceBranch is defined, or a branch named "control"
+  # exists, set it as the first element.
+  controlBranch = None
+  if "targeting" in api and "referenceBranch" in api["targeting"]:
+    controlBranch = values["targeting"]["referenceBranch"]
+  elif any(branch["slug"] == "control" for branch in api["branches"]):
+    controlBranch = "control"
+
+  if controlBranch:
+    values["branches"].append({'name': controlBranch})
+
   for branch in api["branches"]:
+    if branch["slug"] == controlBranch:
+      continue
     values["branches"].append({'name': branch["slug"]})
+
   return values
 
 def parseNimbusAPI(dataDir, slug, skipCache):
