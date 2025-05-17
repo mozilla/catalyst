@@ -168,20 +168,43 @@ def create_config_for_experiment(exp):
   return args
 
 def load_failures(failures_file):
-  failures = set()
+  failures = {}
   if os.path.exists(failures_file):
     with open(failures_file, 'r') as f:
-      failures = set(line.strip() for line in f)
+      try:
+        failures = json.load(f)
+      except json.JSONDecodeError:
+        # Handle case where file exists but is empty or invalid
+        pass
   return failures
 
-def append_failure(failures_file, slug):
-  with open(failures_file, 'a') as f:
-    f.write(f"{slug}\n")
+def append_failure(failures_file, slug, error, config_file):
+  import traceback
+  
+  # Load existing failures
+  failures = load_failures(failures_file)
+  
+  # Load and parse the config file contents
+  config_contents = None
+  if os.path.exists(config_file):
+    with open(config_file, 'r') as f:
+      config_contents = json.load(f)
+
+  # Add new failure with details
+  failures[slug] = {
+    'error_message': str(error),
+    'traceback': traceback.format_exc(),
+    'timestamp': datetime.now().isoformat(),
+    'config': config_contents
+  }
+
+  with open(failures_file, 'w') as f:
+    json.dump(failures, f, indent=2)
 
 def main():
   if len(sys.argv) < 3:
-    print("Error: Please provide paths to both index.html and failures.txt files.")
-    print("Usage: ./find-latest-experiment <index.html> <failures.txt>")
+    print("Error: Please provide paths to both index.html and failures.json files.")
+    print("Usage: ./find-latest-experiment <index.html> <failures.json>")
     sys.exit(1)
 
   index_file = sys.argv[1]
@@ -218,7 +241,10 @@ def main():
       continue
 
     if exp['slug'] in failures:
-      print("---> previously failed")
+      failure = failures[exp['slug']]
+      print("---> previously failed:")
+      print(f"     Error: {failure['error_message']}")
+      print(f"     Time: {failure['timestamp']}")
       continue
 
     print('---------------------------')
@@ -231,7 +257,7 @@ def main():
       generate_report(args)
     except Exception as e:
       print(f"Failed to generate report for {exp['slug']}: {str(e)}")
-      append_failure(failures_file, exp['slug'])
+      append_failure(failures_file, exp['slug'], e, args.config)
 
 if __name__ == "__main__":
   main()
