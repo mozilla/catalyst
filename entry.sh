@@ -8,12 +8,12 @@ rm -rf reports
 echo -e "\n*************************************************"
 echo -e "Copying index.html\n"
 gsutil cp $BUCKET_URL/index.html index.html
-gsutil cp $BUCKET_URL/failures.txt failures.txt
+gsutil cp $BUCKET_URL/failures.json failures.json
 cp index.html index-backup.html
 
 echo -e "\n*************************************************"
 echo -e "Generating reports...\n"
-python find-latest-experiment index.html failures.txt
+python find-latest-experiment index.html failures.json
 
 if [ -d "reports" ] && [ "$(ls -A reports)" ]; then
   for file in reports/* ; do
@@ -31,4 +31,4 @@ if [ -d "reports" ] && [ "$(ls -A reports)" ]; then
   gsutil cp index.html $BUCKET_URL/index.html
 fi
 
-gsutil cp failures.txt $BUCKET_URL/failures.txt
+gsutil cp failures.json $BUCKET_URL/failures.json
