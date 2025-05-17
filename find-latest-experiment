@@ -3,6 +3,7 @@ import requests
 import json
 import sys
 import os
+import time
 from lib.generate import generate_report
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup as bs
@@ -53,7 +54,7 @@ def is_supported_experiment(exp):
   return True
 
 # Check if the experiment finished recently.
-def is_recent_experiment(date_string, days=3):
+def is_recent_experiment(date_string, days=5):
     given_date = datetime.strptime(date_string, "%Y-%m-%d")
     now = datetime.now()
     
@@ -69,16 +70,41 @@ def filter_and_sort(experiments):
     experiments.sort(key=lambda x: x["endDate"])
 
 def retrieve_nimbus_experiment_list():
-  url=f'https://experimenter.services.mozilla.com/api/v6/experiments/'
-  print(f"Loading nimbus experiment list from {url}")
+  url = 'https://experimenter.services.mozilla.com/api/v6/experiments/'
+  max_retries = 3
+  timeout = 60  # seconds
+  retry_delay = 60  # seconds
 
-  response = requests.get(url)
-  if response.ok:
-    values = response.json()
-    return values
-  else:
-    print(f"Failed to retrieve {url}: {response.status_code}")
-    sys.exit(1)
+  for attempt in range(max_retries):
+    try:
+      print(f"Loading nimbus experiment list from {url} (attempt {attempt + 1}/{max_retries})")
+      response = requests.get(url, timeout=timeout)
+      
+      if response.ok:
+        return response.json()
+      
+      if response.status_code == 502:
+        print(f"Received 502 error. Retrying in {retry_delay} seconds...")
+        time.sleep(retry_delay)
+        continue
+      
+      print(f"Failed to retrieve {url}: {response.status_code}")
+      sys.exit(1)
+    
+    except requests.exceptions.Timeout:
+      if attempt < max_retries - 1:
+        print(f"Request timed out. Retrying in {retry_delay} seconds...")
+        time.sleep(retry_delay)
+        continue
+      print(f"Failed to retrieve {url}: Request timed out after {max_retries} attempts")
+      sys.exit(1)
+    
+    except requests.exceptions.RequestException as e:
+      print(f"Failed to retrieve {url}: {str(e)}")
+      sys.exit(1)
+  
+  print(f"Failed to retrieve {url} after {max_retries} attempts")
+  sys.exit(1)
 
 def extract_existing_reports(index_file):
   with open(index_file, 'r') as file:
@@ -141,18 +167,35 @@ def create_config_for_experiment(exp):
   args.html_report = True
   return args
 
+def load_failures(failures_file):
+  failures = set()
+  if os.path.exists(failures_file):
+    with open(failures_file, 'r') as f:
+      failures = set(line.strip() for line in f)
+  return failures
+
+def append_failure(failures_file, slug):
+  with open(failures_file, 'a') as f:
+    f.write(f"{slug}\n")
+
 def main():
-  if len(sys.argv) < 2:
-    print("Error: Please provide path to existing reports index.html file.")
+  if len(sys.argv) < 3:
+    print("Error: Please provide paths to both index.html and failures.txt files.")
+    print("Usage: ./find-latest-experiment <index.html> <failures.txt>")
     sys.exit(1)
 
   index_file = sys.argv[1]
+  failures_file = sys.argv[2]
+
   if not os.path.isfile(index_file):
     print(f"Error: Cannot find '{index_file}'")
     sys.exit(1)
 
   # Get list of reports already created by slug
   reports = extract_existing_reports(index_file)
+
+  # Load list of failed slugs
+  failures = load_failures(failures_file)
 
   # Get experiment list
   experiments = retrieve_nimbus_experiment_list()
@@ -174,12 +217,21 @@ def main():
       print("---> already exists")
       continue
 
+    if exp['slug'] in failures:
+      print("---> previously failed")
+      continue
+
     print('---------------------------')
     print(f"Generating Report for {exp['slug']}")
     print("Config:")
     print(json.dumps(exp, indent=2))
     args = create_config_for_experiment(exp)
-    generate_report(args)
+    
+    try:
+      generate_report(args)
+    except Exception as e:
+      print(f"Failed to generate report for {exp['slug']}: {str(e)}")
+      append_failure(failures_file, exp['slug'])
 
 if __name__ == "__main__":
   main()
