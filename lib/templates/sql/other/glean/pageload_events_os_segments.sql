@@ -22,6 +22,9 @@ eventdata_{{branch.name}}_desktop as (
         {% for isp in blacklist %}
         AND metadata.isp.name != "{{isp}}"
         {% endfor %}
+        {% if pageload_event_filter %}
+        AND {{pageload_event_filter}}
+        {% endif %}
 ),
 eventdata_{{branch.name}}_android as (
     SELECT
@@ -43,6 +46,9 @@ eventdata_{{branch.name}}_android as (
         {% for isp in blacklist %}
         AND metadata.isp.name != "{{isp}}"
         {% endfor %}
+        {% if pageload_event_filter %}
+        AND {{pageload_event_filter}}
+        {% endif %}
 ),
 aggregate_{{branch.name}}_desktop as (
 SELECT
