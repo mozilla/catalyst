@@ -19,6 +19,9 @@ eventdata_{{branch.name}}_desktop as (
 {% for condition in branch.glean_conditions %}
         {{condition}}
 {% endfor %}
+{% if pageload_event_filter %}
+        AND {{pageload_event_filter}}
+{% endif %}
 ),
 aggregate_{{branch.name}}_desktop as (
 SELECT
@@ -52,6 +55,9 @@ eventdata_{{branch.name}}_android as (
 {% for condition in branch.glean_conditions %}
         {{condition}}
 {% endfor %}
+{% if pageload_event_filter %}
+        AND {{pageload_event_filter}}
+{% endif %}
 ),
 aggregate_{{branch.name}}_android as (
 SELECT

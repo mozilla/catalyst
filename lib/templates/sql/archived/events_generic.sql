@@ -27,6 +27,9 @@ WHERE
 {% for condition in segment.conditions %}
   {{condition}}
 {% endfor %}
+{% if pageload_event_filter %}
+  AND {{pageload_event_filter}}
+{% endif %}
 ),
 aggregated_{{segment.name}} as (
 SELECT

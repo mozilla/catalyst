@@ -24,6 +24,9 @@ WHERE
 {% if segmentConditions %}
   {{segmentConditions}}
 {% endif %}
+{% if pageload_event_filter %}
+  AND {{pageload_event_filter}}
+{% endif %}
 )
 SELECT
   bucket,
