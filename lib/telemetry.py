@@ -241,7 +241,8 @@ class TelemetryClient:
         "minVal": minVal,
         "maxVal": maxVal,
         "metric": metric,
-        "branches": branches
+        "branches": branches,
+        "pageload_event_filter": self.config.get('pageload_event_filter')
     }
 
     query = t.render(context)
@@ -275,7 +276,8 @@ class TelemetryClient:
         "startDate": self.config['startDate'],
         "endDate": self.config['endDate'],
         "metric": metric,
-        "blacklist": isp_blacklist
+        "blacklist": isp_blacklist,
+        "pageload_event_filter": self.config.get('pageload_event_filter')
     }
     query = t.render(context)
     # Remove empty lines before returning

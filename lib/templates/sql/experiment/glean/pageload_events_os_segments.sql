@@ -16,6 +16,9 @@ WHERE
   {% for isp in blacklist %}
   AND metadata.isp.name != "{{isp}}"
   {% endfor %}
+  {% if pageload_event_filter %}
+  AND {{pageload_event_filter}}
+  {% endif %}
 )
 {% if include_non_enrolled_branch == True %}
 ,
@@ -33,6 +36,9 @@ WHERE
   AND DATE(submission_timestamp) >= DATE('{{startDate}}')
   AND DATE(submission_timestamp) <= DATE('{{endDate}}')
   AND ARRAY_LENGTH(ping_info.experiments) = 0
+  {% if pageload_event_filter %}
+  AND {{pageload_event_filter}}
+  {% endif %}
 )
 {% endif %}
 , android_eventdata as (
@@ -52,6 +58,9 @@ WHERE
   {% for isp in blacklist %}
   AND metadata.isp.name != "{{isp}}"
   {% endfor %}
+  {% if pageload_event_filter %}
+  AND {{pageload_event_filter}}
+  {% endif %}
 )
 {% if include_non_enrolled_branch == True %}
 ,
@@ -69,6 +78,9 @@ WHERE
   AND DATE(submission_timestamp) >= DATE('{{startDate}}')
   AND DATE(submission_timestamp) <= DATE('{{endDate}}')
   AND ARRAY_LENGTH(ping_info.experiments) = 0
+  {% if pageload_event_filter %}
+  AND {{pageload_event_filter}}
+  {% endif %}
 )
 {% endif %}
 
