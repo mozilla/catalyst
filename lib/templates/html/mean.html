@@ -79,16 +79,13 @@
         n
       </th>
       <th>
-        stddev
-      </th>
-      <th>
         mean
       </th>
       <th>
-        median
+        stddev
       </th>
       <th>
-        95p
+        uplift(%)
       </th>
     </tr>
   </thead>
@@ -106,22 +103,13 @@
         {{dataset.n}}
       </td>
       <td>
-        {{dataset.std}}
-      </td>
-      {% if dataset.uplift %}
-      <td>
-        {{dataset.mean}} ({{dataset.uplift_str}}%)
-      </td>
-      {% else %}
-      <td>
         {{dataset.mean}}
       </td>
-      {% endif %}
       <td>
-        {{dataset.median}}
+        {{dataset.std}}
       </td>
       <td>
-        {{dataset.95p}}
+        {{dataset.uplift}}
       </td>
     </tr>
     {% endfor %}

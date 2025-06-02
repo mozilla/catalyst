@@ -421,55 +421,25 @@ class ReportGenerator:
     control=self.data["branches"][0]
       
     for branch in self.data["branches"]:
-      # Get basic stats
       n = int(self.data[branch][segment][metric_type][metric]["n"])
       n = f'{n:,}'
-      se = "{0:.1f}".format(self.data[branch][segment][metric_type][metric]["se"])
-      std = "{0:.1f}".format(self.data[branch][segment][metric_type][metric]["std"])
+      mean = "{0:.1f}".format(self.data[branch][segment][metric_type][metric]["mean"])
 
-      # Calculate median and 95p from quantile data
-      quantiles = self.data[branch][segment][metric_type][metric]["quantiles"]
-      quantile_vals = self.data[branch][segment][metric_type][metric]["quantile_vals"]
-      
-      # Find closest indices for our desired percentiles
-      median_idx = min(range(len(quantiles)), key=lambda i: abs(quantiles[i] - 0.5))
-      p75_idx = min(range(len(quantiles)), key=lambda i: abs(quantiles[i] - 0.75))
-      p95_idx = min(range(len(quantiles)), key=lambda i: abs(quantiles[i] - 0.95))
-
-      mean_uplift = None
       if branch != control:
-        # Calculate mean and its uplift
         branch_mean = self.data[branch][segment][metric_type][metric]["mean"]
         control_mean = self.data[control][segment][metric_type][metric]["mean"]
-        mean_uplift = (branch_mean-control_mean)/control_mean*100.0
-        mean = "{0:.1f}".format(branch_mean)
-
-        # Get control quantile values
-        control_quantile_vals = self.data[control][segment][metric_type][metric]["quantile_vals"]
-        
-        # Calculate median and its uplift
-        median_uplift = (float(quantile_vals[median_idx]) - float(control_quantile_vals[median_idx])) / float(control_quantile_vals[median_idx]) * 100.0
-        median_uplift_str = "{0:+.1f}".format(median_uplift) if median_uplift != 0 else "0.0"
-        median = "{0:.2f} ({1}%)".format(quantile_vals[median_idx], median_uplift_str)
-
-        # Calculate 95p and its uplift
-        p95_uplift = (float(quantile_vals[p95_idx]) - float(control_quantile_vals[p95_idx])) / float(control_quantile_vals[p95_idx]) * 100.0
-        p95_uplift_str = "{0:+.1f}".format(p95_uplift) if p95_uplift != 0 else "0.0"
-        p95 = "{0:.2f} ({1}%)".format(quantile_vals[p95_idx], p95_uplift_str)
+        uplift = (branch_mean-control_mean)/control_mean*100.0
+        uplift = "{0:.1f}".format(uplift)
       else:
-        # For control branch, just show the values without uplift
-        mean = "{0:.2f}".format(self.data[branch][segment][metric_type][metric]["mean"])
-        median = "{0:.2f}".format(quantile_vals[median_idx])
-        p95 = "{0:.2f}".format(quantile_vals[p95_idx])
+        uplift = ""
 
-      mean_uplift_str = "{0:+.1f}".format(mean_uplift) if mean_uplift != None else "0.0"
+      se   = "{0:.1f}".format(self.data[branch][segment][metric_type][metric]["se"])
+      std  = "{0:.1f}".format(self.data[branch][segment][metric_type][metric]["std"])
+
       dataset = {
           "branch": branch,
           "mean": mean,
-          "uplift": mean_uplift,
-          "uplift_str": mean_uplift_str,
-          "median": median,
-          "95p": p95,
+          "uplift": uplift,
           "n": n,
           "se": se,
           "std": std,
