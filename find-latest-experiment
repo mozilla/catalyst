@@ -55,7 +55,7 @@ def is_supported_experiment(exp):
   return True
 
 # Check if the experiment finished recently.
-def is_recent_experiment(date_string, days=5):
+def is_recent_experiment(date_string, days=14):
     given_date = datetime.strptime(date_string, "%Y-%m-%d")
     now = datetime.now()
     
