@@ -114,7 +114,7 @@ def retrieveNimbusAPI(dataDir, slug, skipCache):
     print(f"Using local config found in {filename}")
     return values
 
-  url=f'https://experimenter.services.mozilla.com/api/v6/experiments/{slug}/'
+  url=f'https://experimenter.services.mozilla.com/api/v7/experiments/{slug}/'
   print(f"Loading nimbus API from {url}")
   response = requests.get(url)
   if response.ok:
@@ -127,12 +127,25 @@ def retrieveNimbusAPI(dataDir, slug, skipCache):
     sys.exit(1)
 
 # We only care about a few values from the API.
-# Specifically, the branch slugs, channel and start/end dates.
+# Specifically, the branch slugs, channels (prioritized) and start/end dates.
 def extractValuesFromAPI(api):
   values = {}
   values["startDate"] = api["startDate"]
   values["endDate"] = api["endDate"]
-  values["channel"] = api["channel"]
+
+  # Some experiments can use multiple channels, so select
+  # the channel based on the following priority: release > beta > nightly
+  if "release" in api["channels"]:
+    channel = "release"
+  elif "beta" in api["channels"]:
+    channel = "beta"
+  elif "nightly" in api["channels"]:
+    channel = "nightly"
+  else:
+    available_channels = ", ".join(api.get("channels", []))
+    raise ValueError(f"No supported channel found. Available channels: [{available_channels}].")
+    
+  values["channel"] = channel
   values["isRollout"] = api["isRollout"]
 
   if values["endDate"] is None:
