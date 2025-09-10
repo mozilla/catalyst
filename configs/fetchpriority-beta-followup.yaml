@@ -1,0 +1,14 @@
+slug: fetchpriority-beta-followup
+histograms: []
+pageload_event_metrics:
+  fcp_time:
+    max: 30000
+  lcp_time:
+    max: 30000
+  load_time:
+    max: 30000
+segments:
+- All
+- Windows
+- Linux
+- Mac

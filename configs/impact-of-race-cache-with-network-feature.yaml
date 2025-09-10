@@ -1,0 +1,19 @@
+slug: impact-of-race-cache-with-network-feature
+histograms:
+- payload.processes.content.histograms.perf_page_load_time_ms
+- payload.processes.content.histograms.perf_page_load_time_from_responsestart_ms
+- payload.processes.content.histograms.perf_first_contentful_paint_ms
+- payload.processes.content.histograms.perf_first_contentful_paint_from_responsestart_ms
+- payload.processes.content.histograms.time_to_response_start_ms
+pageload_event_metrics:
+  fcp_time:
+    max: 10000
+  load_time:
+    max: 30000
+  response_time:
+    max: 10000
+segments:
+- All
+- Windows
+- Linux
+- Mac

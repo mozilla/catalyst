@@ -4,26 +4,51 @@ import yaml
 import sys
 import os
 import datetime
+from typing import Dict, Any, Optional, List
 
-def checkForLocalFile(filename):
+def checkForLocalFile(filename: str) -> Optional[Dict[str, Any]]:
+  """Check if a local file exists and load its JSON content.
+  
+  Args:
+    filename: Path to the file to check
+    
+  Returns:
+    Dictionary containing the file's JSON data, or None if file cannot be loaded
+  """
   try:
     with open(filename, 'r') as f:
       data = json.load(f)
       return data
-  except:
+  except (FileNotFoundError, json.JSONDecodeError, PermissionError):
     return None
 
-def loadProbeIndex():
+def loadProbeIndex() -> Optional[Dict[str, Any]]:
+  """Load the probe index from the local JSON file.
+  
+  Returns:
+    Dictionary containing probe index data, or None if file cannot be loaded
+  """
   filename=os.path.join(os.path.dirname(__file__), "probe-index.json")
   data = checkForLocalFile(filename)
   return data
 
-def annotateMetrics(config):
+def annotateMetrics(config: Dict[str, Any]) -> None:
+  """Annotate config with probe index metadata for histograms and pageload event metrics.
+  
+  Args:
+    config: Configuration dictionary to annotate
+  """
   probeIndex = loadProbeIndex()
   annotateHistograms(config, probeIndex)
   annotatePageloadEventMetrics(config, probeIndex)
 
-def annotatePageloadEventMetrics(config, probeIndex):
+def annotatePageloadEventMetrics(config: Dict[str, Any], probeIndex: Dict[str, Any]) -> None:
+  """Annotate pageload event metrics with schema information.
+  
+  Args:
+    config: Configuration dictionary containing pageload_event_metrics
+    probeIndex: Probe index dictionary containing schema information
+  """
   event_schema = probeIndex["glean"]["perf_page_load"]["extra_keys"]
 
   event_metrics = config['pageload_event_metrics'].copy()
@@ -33,13 +58,26 @@ def annotatePageloadEventMetrics(config, probeIndex):
     config['pageload_event_metrics'][metric] = {}
     if metric in event_schema:
       config['pageload_event_metrics'][metric]["desc"] = event_schema[metric]["description"]
-      config['pageload_event_metrics'][metric]["min"] = event_metrics[metric][0]
-      config['pageload_event_metrics'][metric]["max"] = event_metrics[metric][1]
+      config['pageload_event_metrics'][metric]["min"] = 0
+      
+      # Expect new max parameter format: {max: 30000}
+      metric_config = event_metrics[metric]
+      if isinstance(metric_config, dict):
+        config['pageload_event_metrics'][metric]["max"] = metric_config.get("max", 30000)
+      else:
+        print(f"ERROR: {metric} must use max parameter format, got: {metric_config}")
+        sys.exit(1)
     else:
       print(f"ERROR: {metric} not found in pageload event schema.") 
       sys.exit(1)
 
-def annotateHistograms(config, probeIndex):
+def annotateHistograms(config: Dict[str, Any], probeIndex: Dict[str, Any]) -> None:
+  """Annotate histograms with schema information from probe index.
+  
+  Args:
+    config: Configuration dictionary containing histograms
+    probeIndex: Probe index dictionary containing schema information
+  """
   histograms = config['histograms'].copy()
   config['histograms'] = {}
   for i,hist in enumerate(histograms):
@@ -104,7 +142,20 @@ def annotateHistograms(config, probeIndex):
       print(f"ERROR: {hist_name} not found in histograms schema.") 
       sys.exit(1)
 
-def retrieveNimbusAPI(dataDir, slug, skipCache):
+def retrieveNimbusAPI(dataDir: str, slug: str, skipCache: bool) -> Dict[str, Any]:
+  """Retrieve experiment data from Nimbus API with caching support.
+  
+  Args:
+    dataDir: Directory to store cached API responses
+    slug: Experiment slug identifier
+    skipCache: If True, bypass cache and fetch fresh data
+    
+  Returns:
+    Dictionary containing experiment data from Nimbus API
+    
+  Raises:
+    SystemExit: If API request fails after retries
+  """
   filename = f"{dataDir}/{slug}-nimbus-API.json"
   if skipCache:
     values = None
@@ -114,21 +165,41 @@ def retrieveNimbusAPI(dataDir, slug, skipCache):
     print(f"Using local config found in {filename}")
     return values
 
-  url=f'https://experimenter.services.mozilla.com/api/v7/experiments/{slug}/'
+  url = f'https://experimenter.services.mozilla.com/api/v7/experiments/{slug}/'
   print(f"Loading nimbus API from {url}")
-  response = requests.get(url)
-  if response.ok:
+  
+  try:
+    response = requests.get(url, timeout=30)
+    response.raise_for_status()
+    
     values = response.json()
     with open(filename, 'w') as f:
-        json.dump(values, f, indent=2)
+      json.dump(values, f, indent=2)
     return values
-  else:
-    print(f"Failed to retrieve {url}: {response.status_code}")
+  except requests.exceptions.Timeout:
+    print(f"Failed to retrieve {url}: Request timed out after 30 seconds")
+    sys.exit(1)
+  except requests.exceptions.HTTPError:
+    print(f"Failed to retrieve {url}: HTTP {response.status_code}")
+    sys.exit(1)
+  except requests.exceptions.RequestException as e:
+    print(f"Failed to retrieve {url}: {str(e)}")
+    sys.exit(1)
+  except (json.JSONDecodeError, KeyError) as e:
+    print(f"Failed to parse response from {url}: {str(e)}")
     sys.exit(1)
 
 # We only care about a few values from the API.
 # Specifically, the branch slugs, channels (prioritized) and start/end dates.
-def extractValuesFromAPI(api):
+def extractValuesFromAPI(api: Dict[str, Any]) -> Dict[str, Any]:
+  """Extract relevant values from Nimbus API response.
+  
+  Args:
+    api: Raw API response from Nimbus
+    
+  Returns:
+    Dictionary with extracted experiment metadata
+  """
   values = {}
   values["startDate"] = api["startDate"]
   values["endDate"] = api["endDate"]
@@ -172,14 +243,31 @@ def extractValuesFromAPI(api):
 
   return values
 
-def parseNimbusAPI(dataDir, slug, skipCache):
+def parseNimbusAPI(dataDir: str, slug: str, skipCache: bool) -> Dict[str, Any]:
+  """Parse experiment data from Nimbus API.
+  
+  Args:
+    dataDir: Directory to store cached API responses
+    slug: Experiment slug identifier  
+    skipCache: If True, bypass cache and fetch fresh data
+    
+  Returns:
+    Dictionary with parsed experiment metadata
+  """
   apiValues = retrieveNimbusAPI(dataDir, slug, skipCache)
   return extractValuesFromAPI(apiValues)
 
-def parseConfigFile(configFile):
+def parseConfigFile(configFile: str) -> Dict[str, Any]:
+  """Parse YAML config file and add experiment metadata.
+  
+  Args:
+    configFile: Path to the YAML configuration file
+    
+  Returns:
+    Dictionary containing the parsed configuration with is_experiment flag
+  """
   with open(configFile, "r") as configData:
-    config = json.load(configData)
-    configData.close()
+    config = yaml.safe_load(configData)
 
   if "branches" in config:
     config["is_experiment"] = False

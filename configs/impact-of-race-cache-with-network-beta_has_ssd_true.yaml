@@ -1,0 +1,17 @@
+slug: impact-of-race-cache-with-network-beta
+histograms: []
+pageload_event_metrics:
+  dns_lookup_time:
+    max: 30000
+  time_to_request_start:
+    max: 30000
+  fcp_time:
+    max: 30000
+  load_time:
+    max: 30000
+  lcp_time:
+    max: 30000
+pageload_event_filter: (SELECT value FROM UNNEST(event.extra) WHERE key = 'has_ssd')
+  = 'true'
+segments:
+- Windows
