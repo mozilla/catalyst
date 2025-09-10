@@ -16,6 +16,8 @@ echo -e "Generating reports...\n"
 python find-latest-experiment index.html failures.json
 
 if [ -d "reports" ] && [ "$(ls -A reports)" ]; then
+  # Read index.html again in case it was updated.
+  gsutil cp $BUCKET_URL/index.html index.html
   for file in reports/* ; do
     echo -e "\n*************************************************"
     echo -e "Updating index.html with $file"
