@@ -33,14 +33,6 @@ jobs:
       run: |
         just test
 
-    - name: Upload coverage to Codecov
-      if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage.xml
-        flags: unittests
-        name: codecov-umbrella
-        fail_ci_if_error: true
 
     - name: Build
       run: |-
