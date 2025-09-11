@@ -1,0 +1,12 @@
+slug: test-rollout
+branches:
+  - name: control
+  - name: treatment
+segments:
+  - Windows
+  - Linux
+histograms:
+  - payload.histograms.memory_total
+pageload_event_metrics:
+  fcp_time:
+    max: 15000

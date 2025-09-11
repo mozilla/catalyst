@@ -1,0 +1,16 @@
+{
+  "slug": "test-experiment",
+  "startDate": "2024-01-01",
+  "endDate": "2024-01-31",
+  "channels": ["release"],
+  "isRollout": false,
+  "branches": [
+    {
+      "slug": "control"
+    },
+    {
+      "slug": "treatment"
+    }
+  ],
+  "targeting": {}
+}

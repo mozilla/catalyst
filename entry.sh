@@ -13,7 +13,7 @@ cp index.html index-backup.html
 
 echo -e "\n*************************************************"
 echo -e "Generating reports...\n"
-python find-latest-experiment index.html failures.json
+python bin/find-latest-experiment index.html failures.json
 
 if [ -d "reports" ] && [ "$(ls -A reports)" ]; then
   # Read index.html again in case it was updated.
@@ -21,7 +21,7 @@ if [ -d "reports" ] && [ "$(ls -A reports)" ]; then
   for file in reports/* ; do
     echo -e "\n*************************************************"
     echo -e "Updating index.html with $file"
-    python update-index --index index.html --append $file
+    python bin/update-index --index index.html --append $file
 
     echo -e "Publishing $file\n"
     gsutil cp $file $BUCKET_URL/$(basename $file)

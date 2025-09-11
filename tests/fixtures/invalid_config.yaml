@@ -1,0 +1,9 @@
+slug: invalid-experiment
+segments:
+  - Windows
+histograms:
+  - payload.histograms.memory_total
+pageload_event_metrics:
+  fcp_time:
+    - 0
+    - 20000  # Old format should be rejected

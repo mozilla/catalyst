@@ -4,274 +4,293 @@ import yaml
 import sys
 import os
 import datetime
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
+
 
 def checkForLocalFile(filename: str) -> Optional[Dict[str, Any]]:
-  """Check if a local file exists and load its JSON content.
-  
-  Args:
-    filename: Path to the file to check
-    
-  Returns:
-    Dictionary containing the file's JSON data, or None if file cannot be loaded
-  """
-  try:
-    with open(filename, 'r') as f:
-      data = json.load(f)
-      return data
-  except (FileNotFoundError, json.JSONDecodeError, PermissionError):
-    return None
+    """Check if a local file exists and load its JSON content.
+
+    Args:
+      filename: Path to the file to check
+
+    Returns:
+      Dictionary containing the file's JSON data, or None if file cannot be loaded
+    """
+    try:
+        with open(filename, "r") as f:
+            data = json.load(f)
+            return data
+    except (FileNotFoundError, json.JSONDecodeError, PermissionError):
+        return None
+
 
 def loadProbeIndex() -> Optional[Dict[str, Any]]:
-  """Load the probe index from the local JSON file.
-  
-  Returns:
-    Dictionary containing probe index data, or None if file cannot be loaded
-  """
-  filename=os.path.join(os.path.dirname(__file__), "probe-index.json")
-  data = checkForLocalFile(filename)
-  return data
+    """Load the probe index from the local JSON file.
+
+    Returns:
+      Dictionary containing probe index data, or None if file cannot be loaded
+    """
+    filename = os.path.join(os.path.dirname(__file__), "probe-index.json")
+    data = checkForLocalFile(filename)
+    return data
+
 
 def annotateMetrics(config: Dict[str, Any]) -> None:
-  """Annotate config with probe index metadata for histograms and pageload event metrics.
-  
-  Args:
-    config: Configuration dictionary to annotate
-  """
-  probeIndex = loadProbeIndex()
-  annotateHistograms(config, probeIndex)
-  annotatePageloadEventMetrics(config, probeIndex)
+    """Annotate config with probe index metadata for histograms and pageload events.
 
-def annotatePageloadEventMetrics(config: Dict[str, Any], probeIndex: Dict[str, Any]) -> None:
-  """Annotate pageload event metrics with schema information.
-  
-  Args:
-    config: Configuration dictionary containing pageload_event_metrics
-    probeIndex: Probe index dictionary containing schema information
-  """
-  event_schema = probeIndex["glean"]["perf_page_load"]["extra_keys"]
+    Args:
+      config: Configuration dictionary to annotate
+    """
+    probeIndex = loadProbeIndex()
+    annotateHistograms(config, probeIndex)
+    annotatePageloadEventMetrics(config, probeIndex)
 
-  event_metrics = config['pageload_event_metrics'].copy()
-  config['pageload_event_metrics'] = {}
 
-  for metric in event_metrics:
-    config['pageload_event_metrics'][metric] = {}
-    if metric in event_schema:
-      config['pageload_event_metrics'][metric]["desc"] = event_schema[metric]["description"]
-      config['pageload_event_metrics'][metric]["min"] = 0
-      
-      # Expect new max parameter format: {max: 30000}
-      metric_config = event_metrics[metric]
-      if isinstance(metric_config, dict):
-        config['pageload_event_metrics'][metric]["max"] = metric_config.get("max", 30000)
-      else:
-        print(f"ERROR: {metric} must use max parameter format, got: {metric_config}")
-        sys.exit(1)
-    else:
-      print(f"ERROR: {metric} not found in pageload event schema.") 
-      sys.exit(1)
+def annotatePageloadEventMetrics(
+    config: Dict[str, Any], probeIndex: Dict[str, Any]
+) -> None:
+    """Annotate pageload event metrics with schema information.
+
+    Args:
+      config: Configuration dictionary containing pageload_event_metrics
+      probeIndex: Probe index dictionary containing schema information
+    """
+    event_schema = probeIndex["glean"]["perf_page_load"]["extra_keys"]
+
+    event_metrics = config["pageload_event_metrics"].copy()
+    config["pageload_event_metrics"] = {}
+
+    for metric in event_metrics:
+        config["pageload_event_metrics"][metric] = {}
+        if metric in event_schema:
+            config["pageload_event_metrics"][metric]["desc"] = event_schema[metric][
+                "description"
+            ]
+            config["pageload_event_metrics"][metric]["min"] = 0
+
+            # Expect new max parameter format: {max: 30000}
+            metric_config = event_metrics[metric]
+            if isinstance(metric_config, dict):
+                config["pageload_event_metrics"][metric]["max"] = metric_config.get(
+                    "max", 30000
+                )
+            else:
+                print(
+                    f"ERROR: {metric} must use max parameter format, "
+                    f"got: {metric_config}"
+                )
+                sys.exit(1)
+        else:
+            print(f"ERROR: {metric} not found in pageload event schema.")
+            sys.exit(1)
+
 
 def annotateHistograms(config: Dict[str, Any], probeIndex: Dict[str, Any]) -> None:
-  """Annotate histograms with schema information from probe index.
-  
-  Args:
-    config: Configuration dictionary containing histograms
-    probeIndex: Probe index dictionary containing schema information
-  """
-  histograms = config['histograms'].copy()
-  config['histograms'] = {}
-  for i,hist in enumerate(histograms):
-    config['histograms'][hist] = {}
-    hist_name = hist.split('.')[-1]
+    """Annotate histograms with schema information from probe index.
 
-    # Annotate legacy probe.
-    if hist_name.upper() in probeIndex["legacy"]:
-      schema = probeIndex["legacy"][hist_name.upper()]
-      config['histograms'][hist]["glean"] = False
-      config['histograms'][hist]["desc"] = schema["description"]
-      config['histograms'][hist]["available_on_desktop"] = True
-      config['histograms'][hist]["available_on_android"] = False
-      kind = schema["details"]["kind"]
-      print(hist, kind)
-      if kind=="categorical" or kind=="boolean" or kind=="enumerated":
-        config['histograms'][hist]["kind"] = "categorical"
-        if "labels" in schema["details"]:
-          config['histograms'][hist]["labels"] = schema["details"]["labels"]
-        elif kind=="boolean":
-          config['histograms'][hist]["labels"] = ["no", "yes"]
-        elif "n_buckets" in schema["details"]:
-          n_buckets = schema["details"]["n_buckets"]
-          config['histograms'][hist]["labels"] = list(range(0, n_buckets))
-      else:
-        config['histograms'][hist]["kind"] = "numerical"
+    Args:
+      config: Configuration dictionary containing histograms
+      probeIndex: Probe index dictionary containing schema information
+    """
+    histograms = config["histograms"].copy()
+    config["histograms"] = {}
+    for i, hist in enumerate(histograms):
+        config["histograms"][hist] = {}
+        hist_name = hist.split(".")[-1]
 
+        # Annotate legacy probe.
+        if hist_name.upper() in probeIndex["legacy"]:
+            schema = probeIndex["legacy"][hist_name.upper()]
+            config["histograms"][hist]["glean"] = False
+            config["histograms"][hist]["desc"] = schema["description"]
+            config["histograms"][hist]["available_on_desktop"] = True
+            config["histograms"][hist]["available_on_android"] = False
+            kind = schema["details"]["kind"]
+            print(hist, kind)
+            if kind == "categorical" or kind == "boolean" or kind == "enumerated":
+                config["histograms"][hist]["kind"] = "categorical"
+                if "labels" in schema["details"]:
+                    config["histograms"][hist]["labels"] = schema["details"]["labels"]
+                elif kind == "boolean":
+                    config["histograms"][hist]["labels"] = ["no", "yes"]
+                elif "n_buckets" in schema["details"]:
+                    n_buckets = schema["details"]["n_buckets"]
+                    config["histograms"][hist]["labels"] = list(range(0, n_buckets))
+            else:
+                config["histograms"][hist]["kind"] = "numerical"
 
-    # Annotate glean probe.
-    elif hist_name in probeIndex["glean"]:
-      schema = probeIndex["glean"][hist_name]
-      config['histograms'][hist]["glean"] = True
-      config['histograms'][hist]["desc"] = schema["description"]
-  
-      # Mark if the probe is available on desktop or mobile.
-      config['histograms'][hist]["available_on_desktop"] = False
-      config['histograms'][hist]["available_on_android"] = False
+        # Annotate glean probe.
+        elif hist_name in probeIndex["glean"]:
+            schema = probeIndex["glean"][hist_name]
+            config["histograms"][hist]["glean"] = True
+            config["histograms"][hist]["desc"] = schema["description"]
 
-      if "gecko" in schema["repos"]:
-        config['histograms'][hist]["available_on_desktop"] = True
-        config['histograms'][hist]["available_on_android"] = True
-      elif "fenix" in schema["repos"]:
-        config['histograms'][hist]["available_on_android"] = True
-      elif "desktop" in schema["repos"]:
-        config['histograms'][hist]["available_on_desktop"] = True
+            # Mark if the probe is available on desktop or mobile.
+            config["histograms"][hist]["available_on_desktop"] = False
+            config["histograms"][hist]["available_on_android"] = False
 
-      # Only support timing distribution types for now.
-      if schema["type"] == "timing_distribution":
-        config['histograms'][hist]["kind"] = "numerical"
-      else:
-        type=schema["type"]
-        print(f"ERROR: Type {type} for {hist_name} not currently supported.") 
-        sys.exit(1)
+            if "gecko" in schema["repos"]:
+                config["histograms"][hist]["available_on_desktop"] = True
+                config["histograms"][hist]["available_on_android"] = True
+            elif "fenix" in schema["repos"]:
+                config["histograms"][hist]["available_on_android"] = True
+            elif "desktop" in schema["repos"]:
+                config["histograms"][hist]["available_on_desktop"] = True
 
-      # Use the high and low values from the legacy mirror as bounds.
-      if "telemetry_mirror" in probeIndex["glean"][hist_name]:
-        legacy_mirror = probeIndex["glean"][hist_name]["telemetry_mirror"]
-        high = probeIndex["legacy"][legacy_mirror]["details"]["high"]
-        config['histograms'][hist]['max'] = high
+            # Only support timing distribution types for now.
+            if schema["type"] == "timing_distribution":
+                config["histograms"][hist]["kind"] = "numerical"
+            else:
+                type = schema["type"]
+                print(f"ERROR: Type {type} for {hist_name} not currently supported.")
+                sys.exit(1)
 
-    else:
-      print(f"ERROR: {hist_name} not found in histograms schema.") 
-      sys.exit(1)
+            # Use the high and low values from the legacy mirror as bounds.
+            if "telemetry_mirror" in probeIndex["glean"][hist_name]:
+                legacy_mirror = probeIndex["glean"][hist_name]["telemetry_mirror"]
+                high = probeIndex["legacy"][legacy_mirror]["details"]["high"]
+                config["histograms"][hist]["max"] = high
+
+        else:
+            print(f"ERROR: {hist_name} not found in histograms schema.")
+            sys.exit(1)
+
 
 def retrieveNimbusAPI(dataDir: str, slug: str, skipCache: bool) -> Dict[str, Any]:
-  """Retrieve experiment data from Nimbus API with caching support.
-  
-  Args:
-    dataDir: Directory to store cached API responses
-    slug: Experiment slug identifier
-    skipCache: If True, bypass cache and fetch fresh data
-    
-  Returns:
-    Dictionary containing experiment data from Nimbus API
-    
-  Raises:
-    SystemExit: If API request fails after retries
-  """
-  filename = f"{dataDir}/{slug}-nimbus-API.json"
-  if skipCache:
-    values = None
-  else:
-    values = checkForLocalFile(filename)
-  if values is not None:
-    print(f"Using local config found in {filename}")
-    return values
+    """Retrieve experiment data from Nimbus API with caching support.
 
-  url = f'https://experimenter.services.mozilla.com/api/v7/experiments/{slug}/'
-  print(f"Loading nimbus API from {url}")
-  
-  try:
-    response = requests.get(url, timeout=30)
-    response.raise_for_status()
-    
-    values = response.json()
-    with open(filename, 'w') as f:
-      json.dump(values, f, indent=2)
-    return values
-  except requests.exceptions.Timeout:
-    print(f"Failed to retrieve {url}: Request timed out after 30 seconds")
-    sys.exit(1)
-  except requests.exceptions.HTTPError:
-    print(f"Failed to retrieve {url}: HTTP {response.status_code}")
-    sys.exit(1)
-  except requests.exceptions.RequestException as e:
-    print(f"Failed to retrieve {url}: {str(e)}")
-    sys.exit(1)
-  except (json.JSONDecodeError, KeyError) as e:
-    print(f"Failed to parse response from {url}: {str(e)}")
-    sys.exit(1)
+    Args:
+      dataDir: Directory to store cached API responses
+      slug: Experiment slug identifier
+      skipCache: If True, bypass cache and fetch fresh data
+
+    Returns:
+      Dictionary containing experiment data from Nimbus API
+
+    Raises:
+      SystemExit: If API request fails after retries
+    """
+    filename = f"{dataDir}/{slug}-nimbus-API.json"
+    if skipCache:
+        values = None
+    else:
+        values = checkForLocalFile(filename)
+    if values is not None:
+        print(f"Using local config found in {filename}")
+        return values
+
+    url = f"https://experimenter.services.mozilla.com/api/v7/experiments/{slug}/"
+    print(f"Loading nimbus API from {url}")
+
+    try:
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
+
+        values = response.json()
+        with open(filename, "w") as f:
+            json.dump(values, f, indent=2)
+        return values
+    except requests.exceptions.Timeout:
+        print(f"Failed to retrieve {url}: Request timed out after 30 seconds")
+        sys.exit(1)
+    except requests.exceptions.HTTPError:
+        print(f"Failed to retrieve {url}: HTTP {response.status_code}")
+        sys.exit(1)
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to retrieve {url}: {str(e)}")
+        sys.exit(1)
+    except (json.JSONDecodeError, KeyError) as e:
+        print(f"Failed to parse response from {url}: {str(e)}")
+        sys.exit(1)
+
 
 # We only care about a few values from the API.
 # Specifically, the branch slugs, channels (prioritized) and start/end dates.
 def extractValuesFromAPI(api: Dict[str, Any]) -> Dict[str, Any]:
-  """Extract relevant values from Nimbus API response.
-  
-  Args:
-    api: Raw API response from Nimbus
-    
-  Returns:
-    Dictionary with extracted experiment metadata
-  """
-  values = {}
-  values["startDate"] = api["startDate"]
-  values["endDate"] = api["endDate"]
+    """Extract relevant values from Nimbus API response.
 
-  # Some experiments can use multiple channels, so select
-  # the channel based on the following priority: release > beta > nightly
-  if "release" in api["channels"]:
-    channel = "release"
-  elif "beta" in api["channels"]:
-    channel = "beta"
-  elif "nightly" in api["channels"]:
-    channel = "nightly"
-  else:
-    available_channels = ", ".join(api.get("channels", []))
-    raise ValueError(f"No supported channel found. Available channels: [{available_channels}].")
-    
-  values["channel"] = channel
-  values["isRollout"] = api["isRollout"]
+    Args:
+      api: Raw API response from Nimbus
 
-  if values["endDate"] is None:
-    now = datetime.datetime.now();
-    values["endDate"] = now.strftime('%Y-%m-%d')
+    Returns:
+      Dictionary with extracted experiment metadata
+    """
+    values = {}
+    values["startDate"] = api["startDate"]
+    values["endDate"] = api["endDate"]
 
-  values["branches"] = []
+    # Some experiments can use multiple channels, so select
+    # the channel based on the following priority: release > beta > nightly
+    if "release" in api["channels"]:
+        channel = "release"
+    elif "beta" in api["channels"]:
+        channel = "beta"
+    elif "nightly" in api["channels"]:
+        channel = "nightly"
+    else:
+        available_channels = ", ".join(api.get("channels", []))
+        raise ValueError(
+            f"No supported channel found. Available channels: [{available_channels}]."
+        )
 
-  # If a referenceBranch is defined, or a branch named "control"
-  # exists, set it as the first element.
-  controlBranch = None
-  if "targeting" in api and "referenceBranch" in api["targeting"]:
-    controlBranch = values["targeting"]["referenceBranch"]
-  elif any(branch["slug"] == "control" for branch in api["branches"]):
-    controlBranch = "control"
+    values["channel"] = channel
+    values["isRollout"] = api["isRollout"]
 
-  if controlBranch:
-    values["branches"].append({'name': controlBranch})
+    if values["endDate"] is None:
+        now = datetime.datetime.now()
+        values["endDate"] = now.strftime("%Y-%m-%d")
 
-  for branch in api["branches"]:
-    if branch["slug"] == controlBranch:
-      continue
-    values["branches"].append({'name': branch["slug"]})
+    values["branches"] = []
 
-  return values
+    # If a referenceBranch is defined, or a branch named "control"
+    # exists, set it as the first element.
+    controlBranch = None
+    if "targeting" in api and "referenceBranch" in api["targeting"]:
+        controlBranch = values["targeting"]["referenceBranch"]
+    elif any(branch["slug"] == "control" for branch in api["branches"]):
+        controlBranch = "control"
+
+    if controlBranch:
+        values["branches"].append({"name": controlBranch})
+
+    for branch in api["branches"]:
+        if branch["slug"] == controlBranch:
+            continue
+        values["branches"].append({"name": branch["slug"]})
+
+    return values
+
 
 def parseNimbusAPI(dataDir: str, slug: str, skipCache: bool) -> Dict[str, Any]:
-  """Parse experiment data from Nimbus API.
-  
-  Args:
-    dataDir: Directory to store cached API responses
-    slug: Experiment slug identifier  
-    skipCache: If True, bypass cache and fetch fresh data
-    
-  Returns:
-    Dictionary with parsed experiment metadata
-  """
-  apiValues = retrieveNimbusAPI(dataDir, slug, skipCache)
-  return extractValuesFromAPI(apiValues)
+    """Parse experiment data from Nimbus API.
+
+    Args:
+      dataDir: Directory to store cached API responses
+      slug: Experiment slug identifier
+      skipCache: If True, bypass cache and fetch fresh data
+
+    Returns:
+      Dictionary with parsed experiment metadata
+    """
+    apiValues = retrieveNimbusAPI(dataDir, slug, skipCache)
+    return extractValuesFromAPI(apiValues)
+
 
 def parseConfigFile(configFile: str) -> Dict[str, Any]:
-  """Parse YAML config file and add experiment metadata.
-  
-  Args:
-    configFile: Path to the YAML configuration file
-    
-  Returns:
-    Dictionary containing the parsed configuration with is_experiment flag
-  """
-  with open(configFile, "r") as configData:
-    config = yaml.safe_load(configData)
+    """Parse YAML config file and add experiment metadata.
 
-  if "branches" in config:
-    config["is_experiment"] = False
-  else:
-    config["is_experiment"] = True
+    Args:
+      configFile: Path to the YAML configuration file
 
-  return config
+    Returns:
+      Dictionary containing the parsed configuration with is_experiment flag
+    """
+    with open(configFile, "r") as configData:
+        config = yaml.safe_load(configData)
+
+    if "branches" in config:
+        config["is_experiment"] = False
+    else:
+        config["is_experiment"] = True
+
+    return config

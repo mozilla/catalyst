@@ -1,0 +1,45 @@
+{
+  "glean": {
+    "perf_page_load": {
+      "extra_keys": {
+        "fcp_time": {
+          "description": "Time between firstContentfulPaint and navigationStart, in ms."
+        },
+        "lcp_time": {
+          "description": "Time between largestContentfulPaint and navigationStart, in ms."
+        },
+        "load_time": {
+          "description": "Time between loadEventStart and navigationStart, in ms."
+        }
+      }
+    },
+    "memory_total": {
+      "type": "timing_distribution",
+      "description": "Total memory usage",
+      "repos": ["gecko"],
+      "telemetry_mirror": "MEMORY_TOTAL"
+    },
+    "performance_pageload_fcp": {
+      "type": "timing_distribution", 
+      "description": "First Contentful Paint timing",
+      "repos": ["gecko"],
+      "telemetry_mirror": "PERF_FCP"
+    }
+  },
+  "legacy": {
+    "MEMORY_TOTAL": {
+      "description": "Total memory usage (legacy)",
+      "details": {
+        "kind": "exponential",
+        "high": 1000000
+      }
+    },
+    "PERF_FCP": {
+      "description": "First Contentful Paint (legacy)",
+      "details": {
+        "kind": "exponential", 
+        "high": 60000
+      }
+    }
+  }
+}

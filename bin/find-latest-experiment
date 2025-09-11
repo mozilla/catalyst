@@ -1,0 +1,269 @@
+#!/usr/bin/env python3
+import requests
+import json
+import yaml
+import sys
+import os
+import time
+
+# Add the parent directory to sys.path to import lib modules
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+from lib.generate import generate_report
+from datetime import datetime, timedelta
+from bs4 import BeautifulSoup as bs
+
+default_histograms = [
+  "payload.histograms.memory_total",
+  "metrics.timing_distribution.performance_pageload_fcp",
+  "metrics.timing_distribution.performance_pageload_load_time",
+  "metrics.timing_distribution.perf_largest_contentful_paint",
+]
+
+default_events = {
+  "fcp_time" : {"max": 30000},
+  "lcp_time" : {"max": 30000},
+  "load_time": {"max": 30000},
+  "response_time": {"max": 30000}
+}
+
+class NpEncoder(json.JSONEncoder):
+  def default(self, obj):
+    if isinstance(obj, np.integer):
+      return int(obj)
+    if isinstance(obj, np.floating):
+      return float(obj)
+    if isinstance(obj, np.ndarray):
+      return obj.tolist()
+    return super(NpEncoder, self).default(obj)
+
+# Only generate reports for Desktop or Android experiments.
+def is_supported_experiment(exp):
+  if not (exp['appName'] == 'firefox_desktop' or exp['appName'] == 'fenix'):
+    print("--> unsupported platform.")
+    return False
+
+  # Skip experiments with no branches
+  if len(exp['branches']) == 0:
+    print("--> no branches found.")
+    return False
+
+  # If this is an experiment with only 1 branch, then pretend it's a rollout.
+  if not exp['isRollout'] and len(exp['branches']) == 1:
+    exp['isRollout'] = True
+
+  # Cannot generate a performance report for rollouts that use 100% of population.
+  if exp['isRollout'] and len(exp['branches']) == 1 and exp['branches'][0]['ratio'] >= 0.9:
+    print("--> no control population available.")
+    return False
+
+  return True
+
+# Check if the experiment finished recently.
+def is_recent_experiment(date_string, days=14):
+    given_date = datetime.strptime(date_string, "%Y-%m-%d")
+    now = datetime.now()
+    
+    # Check if the given date is within the last 3 days
+    days_ago = now - timedelta(days)
+    return days_ago <= given_date
+
+def filter_and_sort(experiments):
+    # Remove invalid entries (those with None as endDate)
+    experiments[:] = [exp for exp in experiments if exp["endDate"] is not None]
+
+    # Sort the remaining entries by endDate
+    experiments.sort(key=lambda x: x["endDate"])
+
+def retrieve_nimbus_experiment_list():
+  url = 'https://experimenter.services.mozilla.com/api/v6/experiments/'
+  max_retries = 3
+  timeout = 60  # seconds
+  retry_delay = 60  # seconds
+
+  for attempt in range(max_retries):
+    try:
+      print(f"Loading nimbus experiment list from {url} (attempt {attempt + 1}/{max_retries})")
+      response = requests.get(url, timeout=timeout)
+      
+      if response.ok:
+        return response.json()
+      
+      if response.status_code == 502:
+        print(f"Received 502 error. Retrying in {retry_delay} seconds...")
+        time.sleep(retry_delay)
+        continue
+      
+      print(f"Failed to retrieve {url}: {response.status_code}")
+      sys.exit(1)
+    
+    except requests.exceptions.Timeout:
+      if attempt < max_retries - 1:
+        print(f"Request timed out. Retrying in {retry_delay} seconds...")
+        time.sleep(retry_delay)
+        continue
+      print(f"Failed to retrieve {url}: Request timed out after {max_retries} attempts")
+      sys.exit(1)
+    
+    except requests.exceptions.RequestException as e:
+      print(f"Failed to retrieve {url}: {str(e)}")
+      sys.exit(1)
+  
+  print(f"Failed to retrieve {url} after {max_retries} attempts")
+  sys.exit(1)
+
+def extract_existing_reports(index_file):
+  with open(index_file, 'r') as file:
+    soup = bs(file, 'html.parser')
+  
+  # Find the table containing experiment reports
+  experiment_table = soup.find('table', class_='experiment-table')
+  experiments = {}
+  
+  if experiment_table:
+    rows = experiment_table.find_all('tr')[1:]  # Skip the header row
+    for row in rows:
+      cells = row.find_all('td')
+      if cells and len(cells) > 0:
+        experiment_name = cells[0].get_text(strip=True)
+        experiments[experiment_name] = {
+          'start_date': cells[1].get_text(strip=True),
+          'end_date': cells[2].get_text(strip=True),
+          'channel': cells[3].get_text(strip=True)
+        }
+  
+  return experiments
+
+def generate_histogram_metrics(exp):
+  return default_histograms
+
+def generate_event_metrics(exp):
+  return default_events
+
+# Create a config for the experiment, and return a dict of
+# args used to generate the experiment report.
+def create_config_for_experiment(exp):
+  args = {}
+  config = {}
+  config['slug'] = exp['slug']
+
+  if exp['appName'] == 'firefox_desktop':
+    config['segments'] = ['Windows', 'Linux', 'Mac']
+  elif exp['appName'] == 'fenix':
+    config['segments'] = ['Android']
+
+  config['histograms'] = generate_histogram_metrics(exp)
+  config['pageload_event_metrics'] = generate_event_metrics(exp)
+
+  configFile = f"{exp['slug']}.yaml"
+  with open(configFile, 'w') as f:
+    yaml.dump(config, f, indent=2, default_flow_style=False)
+
+  class ArgsDict(dict):
+    def __getattr__(self, name):
+      return self[name]
+    def __setattr__(self, name, value):
+      self[name] = value
+  
+  args = ArgsDict()
+  args.config = configFile
+  args.dataDir = 'data'
+  args.reportDir = 'reports'
+  args.skip_cache = False
+  args.html_report = True
+  return args
+
+def load_failures(failures_file):
+  failures = {}
+  if os.path.exists(failures_file):
+    with open(failures_file, 'r') as f:
+      try:
+        failures = json.load(f)
+      except json.JSONDecodeError:
+        # Handle case where file exists but is empty or invalid
+        pass
+  return failures
+
+def append_failure(failures_file, slug, error, config_file):
+  import traceback
+  
+  # Load existing failures
+  failures = load_failures(failures_file)
+  
+  # Load and parse the config file contents
+  config_contents = None
+  if os.path.exists(config_file):
+    with open(config_file, 'r') as f:
+      config_contents = json.load(f)
+
+  # Add new failure with details
+  failures[slug] = {
+    'error_message': str(error),
+    'traceback': traceback.format_exc(),
+    'timestamp': datetime.now().isoformat(),
+    'config': config_contents
+  }
+
+  with open(failures_file, 'w') as f:
+    json.dump(failures, f, indent=2)
+
+def main():
+  if len(sys.argv) < 3:
+    print("Error: Please provide paths to both index.html and failures.json files.")
+    print("Usage: ./find-latest-experiment <index.html> <failures.json>")
+    sys.exit(1)
+
+  index_file = sys.argv[1]
+  failures_file = sys.argv[2]
+
+  if not os.path.isfile(index_file):
+    print(f"Error: Cannot find '{index_file}'")
+    sys.exit(1)
+
+  # Get list of reports already created by slug
+  reports = extract_existing_reports(index_file)
+
+  # Load list of failed slugs
+  failures = load_failures(failures_file)
+
+  # Get experiment list
+  experiments = retrieve_nimbus_experiment_list()
+
+  # Sort list by endDate
+  filter_and_sort(experiments)
+  
+  for exp in experiments:
+    print("Checking ", exp['slug'], "...")
+
+    if not is_recent_experiment(exp['endDate']):
+      print("---> not recent")
+      continue
+
+    if not is_supported_experiment(exp):
+      continue
+
+    if exp['slug'] in reports:
+      print("---> already exists")
+      continue
+
+    if exp['slug'] in failures:
+      failure = failures[exp['slug']]
+      print("---> previously failed:")
+      print(f"     Error: {failure['error_message']}")
+      print(f"     Time: {failure['timestamp']}")
+      continue
+
+    print('---------------------------')
+    print(f"Generating Report for {exp['slug']}")
+    print("Config:")
+    print(json.dumps(exp, indent=2))
+    args = create_config_for_experiment(exp)
+    
+    try:
+      generate_report(args)
+    except Exception as e:
+      print(f"Failed to generate report for {exp['slug']}: {str(e)}")
+      append_failure(failures_file, exp['slug'], e, args.config)
+
+if __name__ == "__main__":
+  main()

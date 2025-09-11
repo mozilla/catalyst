@@ -1,0 +1,37 @@
+# Template Configuration for Catalyst Performance Reports
+# Copy this file and customize for your experiment
+#
+# Example usage:
+# 1. Copy template: cp configs/template.yaml configs/my-experiment.yaml
+# 2. Edit the configuration values below
+# 3. Generate report: just generate-perf-report --config configs/my-experiment.yaml
+# 4. Generated reports will be saved to reports/{slug}.html
+
+# Experiment identifier (required)
+# This should match your experiment slug from Nimbus
+slug: your-experiment-slug-here
+
+# Target segments/platforms (optional)
+# Common values: Windows, Linux, Mac, Android
+segments:
+  - Windows
+  - Linux
+  - Mac
+
+# Histogram metrics to analyze (optional)
+histograms:
+  - payload.histograms.memory_total
+  - metrics.timing_distribution.performance_pageload_fcp
+  - metrics.timing_distribution.performance_pageload_load_time
+  - metrics.timing_distribution.perf_largest_contentful_paint
+
+# Page load event metrics with max values in ms (optional)
+pageload_event_metrics:
+  fcp_time:
+    max: 30000
+  lcp_time:
+    max: 30000
+  load_time:
+    max: 30000
+  response_time:
+    max: 30000

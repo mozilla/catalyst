@@ -1,7 +1,29 @@
-data
+# Generated data and reports
+data/
+reports/
+
+# Temporary and swap files
 *~
 *.swp
-__pycache__
 *.DS_Store
-reports/
 isp_blacklist.txt
+
+# Python cache and bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# Testing and coverage files
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+# Development tools
+.claude/
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-*
