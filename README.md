@@ -70,10 +70,10 @@ Automatically fix code formatting issues using Black
 
 ### Binary Commands
 
-### 🚀 `just generate-perf-report [ARGS]`
+### 🚀 `just run [ARGS]`
 Generate performance reports from experiment configs
 ```bash
-just generate-perf-report --config configs/experiment-name.yaml
+just run --config configs/experiment-name.yaml
 ```
 
 ### 🔍 `just find-latest-experiment [ARGS]`
@@ -94,8 +94,6 @@ Update probe index from telemetry schemas
 just update-probe-index
 ```
 
-### 🚀 `just run [ARGS]`
-Alias for `generate-perf-report` (backwards compatibility)
 
 ## Configuration
 
@@ -141,17 +139,3 @@ pageload_event_metrics:
 Available configuration files:
 - **`configs/template.yaml`** - Template with default histograms and events (start here!)
 - **`configs/`** - Production YAML configurations for existing experiments
-
-## Development
-
-### Running Tests
-```bash
-just test           # Complete test suite (unit + integration + coverage + linting)
-just lint           # Fix code formatting
-```
-
-### Available Commands
-- `just help` - Show all available commands with examples
-- `just install` - Install all dependencies  
-- `just test` - Run complete test suite
-- `just lint` - Fix code formatting automatically

@@ -398,6 +398,11 @@ class TelemetryClient:
     def generateHistogramQuery_OS_segments_glean(self, histogram):
         t = get_template("experiment/glean/histogram_os_segments.sql")
 
+        isp_blacklist = []
+        if "isp_blacklist" in self.config:
+            with open(self.config["isp_blacklist"], "r") as file:
+                isp_blacklist = [line.strip() for line in file]
+
         context = {
             "include_non_enrolled_branch": self.config["include_non_enrolled_branch"],
             "slug": self.config["slug"],
@@ -411,6 +416,7 @@ class TelemetryClient:
             "available_on_android": self.config["histograms"][histogram][
                 "available_on_android"
             ],
+            "blacklist": isp_blacklist,
         }
         query = t.render(context)
         # Remove empty lines before returning

@@ -36,12 +36,8 @@ install:
 
 # Run tests with coverage and linting
 test:
-    @echo "🧪 Running unit tests..."
-    python tests/test_parser.py -v
-    @echo "📊 Running tests with coverage..."
-    pytest tests/ -v --cov=lib.parser --cov-report=xml --cov-report=html --cov-report=term
-    @echo "🔧 Running config tests..."
-    python tests/test_configs.py
+    @echo "🧪 Running all tests with coverage..."
+    pytest tests/ -v --cov=lib --cov-report=xml --cov-report=html --cov-report=term
     @echo "🎨 Running linting checks..."
     flake8 lib/ tests/ bin/ --max-line-length=88 --extend-ignore=E203,W503,E501 --per-file-ignores="tests/*:E402"
     @echo "✅ All tests and linting passed!"
@@ -58,7 +54,7 @@ check:
 # Fix linting errors automatically
 lint:
     @echo "🎨 Fixing code formatting..."
-    black lib/ tests/ scripts/ bin/
+    black lib/ tests/ bin/
     @echo "✅ Code formatted!"
 
 # Generate performance report

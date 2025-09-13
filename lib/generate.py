@@ -127,9 +127,9 @@ def generate_report(args):
             # If non-enrolled branch was included, add an extra branch.
             if "include_non_enrolled_branch" in config:
                 include_non_enrolled_branch = config["include_non_enrolled_branch"]
-                if (
-                    include_non_enrolled_branch
-                    or include_non_enrolled_branch.lower() == "true"
+                if include_non_enrolled_branch is True or (
+                    isinstance(include_non_enrolled_branch, str)
+                    and include_non_enrolled_branch.lower() == "true"
                 ):
                     config["include_non_enrolled_branch"] = True
                     if config["isRollout"]:
