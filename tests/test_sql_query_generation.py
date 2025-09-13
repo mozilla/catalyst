@@ -12,6 +12,7 @@ import sys
 import tempfile
 import shutil
 import unittest
+from unittest.mock import patch, MagicMock
 
 # Add lib directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -54,8 +55,14 @@ class TestSQLQueryGeneration(unittest.TestCase):
         """Clean up temporary files."""
         shutil.rmtree(self.test_dir)
 
-    def create_experiment_config(self, config_name, config_overrides):
+    @patch("lib.telemetry.bigquery.Client")
+    def create_experiment_config(
+        self, config_name, config_overrides, mock_bigquery_client
+    ):
         """Create an experiment config and return the TelemetryClient."""
+        # Mock the BigQuery client to avoid authentication
+        mock_bigquery_client.return_value = MagicMock()
+
         experiment_data_dir = os.path.join(self.data_dir, config_name)
         os.makedirs(experiment_data_dir, exist_ok=True)
 
