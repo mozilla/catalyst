@@ -17,6 +17,7 @@ __pycache__/
 .coverage
 coverage.xml
 htmlcov/
+venv/
 .pytest_cache/
 .mypy_cache/
 
