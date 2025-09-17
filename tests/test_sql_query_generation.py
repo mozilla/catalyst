@@ -377,55 +377,6 @@ class TestSQLQueryGeneration(unittest.TestCase):
         # Validate the query
         self.validate_sql_basic_checks(query, "legacy_histogram")
 
-    def test_query_generation_with_isp_blacklist(self):
-        """Test query generation with ISP blacklist."""
-        # Create temporary ISP blacklist file
-        isp_blacklist_file = os.path.join(self.test_dir, "isp_blacklist.txt")
-        with open(isp_blacklist_file, "w") as f:
-            f.write("Bad ISP 1\n")
-            f.write("Bad ISP 2\n")
-            f.write("Suspicious Provider\n")
-
-        config_overrides = {
-            "is_experiment": True,
-            "channel": "release",
-            "startDate": "2024-01-01",
-            "endDate": "2024-01-07",
-            "segments": ["Windows"],
-            "histograms": {
-                "metrics.timing_distribution.performance_pageload_fcp": {
-                    "glean": True,
-                    "desc": "Test histogram for FCP timing",
-                    "available_on_desktop": True,
-                    "available_on_android": True,
-                    "kind": "numerical",
-                }
-            },
-            "isp_blacklist": isp_blacklist_file,
-            "include_non_enrolled_branch": False,
-        }
-
-        telemetry_client = self.create_experiment_config(
-            "isp-blacklist", config_overrides
-        )
-
-        # Generate query with ISP blacklist
-        histogram = "metrics.timing_distribution.performance_pageload_fcp"
-        query = telemetry_client.generateHistogramQuery_OS_segments_glean(histogram)
-
-        self.assertIsNotNone(query, "Query generation with ISP blacklist failed")
-        self.generated_queries.append(("query_with_isp_blacklist", query))
-
-        # Check for ISP blacklist conditions
-        self.assertIn("metadata.isp.name", query, "Query should include ISP filtering")
-        self.assertIn(
-            "Bad ISP 1", query, "Query should include specific blacklisted ISPs"
-        )
-        self.assertIn("!=", query, "Query should exclude blacklisted ISPs")
-
-        # Validate the query
-        self.validate_sql_basic_checks(query, "query_with_isp_blacklist")
-
     @unittest.skipUnless(
         SQL_VALIDATOR_AVAILABLE or BIGQUERY_PARSER_AVAILABLE,
         "No SQL validation packages available",
@@ -439,7 +390,6 @@ class TestSQLQueryGeneration(unittest.TestCase):
             self.test_pageload_event_query_generation,
             self.test_rollout_query_generation,
             self.test_legacy_histogram_query_generation,
-            self.test_query_generation_with_isp_blacklist,
             self.test_empty_pageload_event_metrics,
             self.test_empty_histograms,
             self.test_only_histograms_no_pageload_events,

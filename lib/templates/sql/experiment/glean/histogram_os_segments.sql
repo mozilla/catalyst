@@ -17,9 +17,6 @@ desktop_data as (
       AND {{histogram}} is not null
       AND ARRAY_LENGTH(ping_info.experiments) > 0
       AND mozfun.map.get_key(ping_info.experiments, "{{slug}}").branch is not null
-      {% for isp in blacklist %}
-      AND metadata.isp.name != "{{isp}}"
-      {% endfor %}
 ),
 {% else %}
 desktop_data as (
@@ -48,9 +45,6 @@ android_data as (
       AND {{histogram}} is not null
       AND ARRAY_LENGTH(ping_info.experiments) > 0
       AND mozfun.map.get_key(ping_info.experiments, "{{slug}}").branch is not null
-      {% for isp in blacklist %}
-      AND metadata.isp.name != "{{isp}}"
-      {% endfor %}
 )
 {% else %}
 android_data as (

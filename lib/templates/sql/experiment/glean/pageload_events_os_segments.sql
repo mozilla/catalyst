@@ -13,9 +13,6 @@ WHERE
   AND DATE(submission_timestamp) >= DATE('{{startDate}}')
   AND DATE(submission_timestamp) <= DATE('{{endDate}}')  
   AND mozfun.map.get_key(ping_info.experiments, "{{slug}}").branch is not null
-  {% for isp in blacklist %}
-  AND metadata.isp.name != "{{isp}}"
-  {% endfor %}
   {% if pageload_event_filter %}
   AND {{pageload_event_filter}}
   {% endif %}
@@ -55,9 +52,6 @@ WHERE
   AND DATE(submission_timestamp) >= DATE('{{startDate}}')
   AND DATE(submission_timestamp) <= DATE('{{endDate}}')  
   AND mozfun.map.get_key(ping_info.experiments, "{{slug}}").branch is not null
-  {% for isp in blacklist %}
-  AND metadata.isp.name != "{{isp}}"
-  {% endfor %}
   {% if pageload_event_filter %}
   AND {{pageload_event_filter}}
   {% endif %}

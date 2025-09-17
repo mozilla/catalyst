@@ -19,9 +19,6 @@ eventdata_{{branch.name}}_desktop as (
 {% for condition in branch.glean_conditions %}
         {{condition}}
 {% endfor %}
-        {% for isp in blacklist %}
-        AND metadata.isp.name != "{{isp}}"
-        {% endfor %}
         {% if pageload_event_filter %}
         AND {{pageload_event_filter}}
         {% endif %}
@@ -43,9 +40,6 @@ eventdata_{{branch.name}}_android as (
 {% for condition in branch.glean_conditions %}
         {{condition}}
 {% endfor %}
-        {% for isp in blacklist %}
-        AND metadata.isp.name != "{{isp}}"
-        {% endfor %}
         {% if pageload_event_filter %}
         AND {{pageload_event_filter}}
         {% endif %}

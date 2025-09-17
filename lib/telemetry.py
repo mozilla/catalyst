@@ -1,13 +1,31 @@
+"""
+BigQuery telemetry data analysis module.
+
+This module provides functionality to generate BigQuery SQL queries,
+execute them, and process histogram and pageload event metrics data.
+"""
+
 import os
 import sys
+from typing import Dict, List, Any, Optional
 import pandas as pd
 from google.cloud import bigquery
 from django.template.loader import get_template
 
 
-# Remove any histograms that have empty datasets in
-# either a branch, or branch segment.
-def invalidDataSet(df, histogram, branches, segments):
+def invalidDataSet(df: pd.DataFrame, histogram: str, branches: List[Dict[str, Any]], segments: List[str]) -> bool:
+    """
+    Remove any histograms that have empty datasets in either a branch or branch segment.
+
+    Args:
+        df: DataFrame containing telemetry data
+        histogram: Name of the histogram being validated
+        branches: List of branch configurations
+        segments: List of segment names
+
+    Returns:
+        True if dataset is invalid (empty or missing data), False otherwise
+    """
     if df.empty:
         print(f"Empty dataset found, removing: {histogram}.")
         return True
@@ -33,7 +51,16 @@ def invalidDataSet(df, histogram, branches, segments):
     return False
 
 
-def segments_are_all_OS(segments):
+def segments_are_all_OS(segments: List[str]) -> bool:
+    """
+    Check if all segments are OS-based (allows for faster queries).
+
+    Args:
+        segments: List of segment names to validate
+
+    Returns:
+        True if all segments are OS-based, False otherwise
+    """
     os_segments = set(["Windows", "All", "Linux", "Mac", "Android"])
     for segment in segments:
         if segment not in os_segments:
@@ -41,17 +68,44 @@ def segments_are_all_OS(segments):
     return True
 
 
+def clean_sql_query(query: str) -> str:
+    """
+    Clean SQL query by removing empty lines.
+
+    Args:
+        query: Raw SQL query string
+
+    Returns:
+        Cleaned SQL query with empty lines removed
+    """
+    return "".join([s for s in query.strip().splitlines(True) if s.strip()])
+
+
 class TelemetryClient:
-    def __init__(self, dataDir, config, skipCache):
+    """
+    BigQuery client for telemetry data analysis.
+
+    This class handles SQL query generation, BigQuery execution,
+    and local caching of results.
+    """
+    def __init__(self, dataDir: str, config: Dict[str, Any], skipCache: bool = False):
         self.client = bigquery.Client()
         self.config = config
         self.dataDir = dataDir
         self.skipCache = skipCache
-        self.queries = []
+        self.queries: List[Dict[str, str]] = []
+
+        # Ensure data directory exists
+        os.makedirs(dataDir, exist_ok=True)
 
     def collectResultsFromQuery_OS_segments(
-        self, results, branch, segment, event_metrics, histograms
-    ):
+        self,
+        results: Dict[str, Any],
+        branch: str,
+        segment: str,
+        event_metrics: Dict[str, pd.DataFrame],
+        histograms: Dict[str, pd.DataFrame]
+    ) -> None:
         for histogram in self.config["histograms"]:
             df = histograms[histogram]
             if segment == "All":
@@ -151,7 +205,13 @@ class TelemetryClient:
                 f"    segment={segment} len(pageload event: {metric}) = ", len(buckets)
             )
 
-    def getResults(self):
+    def getResults(self) -> Dict[str, Any]:
+        """
+        Get telemetry results for the configured experiment.
+
+        Returns:
+            Dictionary containing processed histogram and pageload event data
+        """
         if self.config["is_experiment"] is True:
             return self.getResultsForExperiment()
         else:
@@ -292,8 +352,7 @@ class TelemetryClient:
         }
 
         query = t.render(context)
-        # Remove empty lines before returning
-        query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
+        query = clean_sql_query(query)
         self.queries.append({"name": f"Pageload event: {metric}", "query": query})
         return query
 
@@ -305,11 +364,6 @@ class TelemetryClient:
         metricMin = self.config["pageload_event_metrics"][metric]["min"]
         metricMax = self.config["pageload_event_metrics"][metric]["max"]
 
-        isp_blacklist = []
-        if "isp_blacklist" in self.config:
-            with open(self.config["isp_blacklist"], "r") as file:
-                isp_blacklist = [line.strip() for line in file]
-
         context = {
             "include_non_enrolled_branch": self.config["include_non_enrolled_branch"],
             "minVal": metricMin,
@@ -319,12 +373,10 @@ class TelemetryClient:
             "startDate": self.config["startDate"],
             "endDate": self.config["endDate"],
             "metric": metric,
-            "blacklist": isp_blacklist,
             "pageload_event_filter": self.config.get("pageload_event_filter"),
         }
         query = t.render(context)
-        # Remove empty lines before returning
-        query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
+        query = clean_sql_query(query)
         self.queries.append({"name": f"Pageload event: {metric}", "query": query})
         return query
 
@@ -360,8 +412,7 @@ class TelemetryClient:
             "segments": segmentInfo,
         }
         query = t.render(context)
-        # Remove empty lines before returning
-        query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
+        query = clean_sql_query(query)
         self.queries.append({"name": f"Pageload event: {metric}", "query": query})
         return query
 
@@ -369,11 +420,6 @@ class TelemetryClient:
     def generateHistogramQuery_OS_segments_legacy(self, histogram):
         t = get_template("experiment/legacy/histogram_os_segments.sql")
 
-        isp_blacklist = []
-        if "isp_blacklist" in self.config:
-            with open(self.config["isp_blacklist"], "r") as file:
-                isp_blacklist = [line.strip() for line in file]
-
         context = {
             "include_non_enrolled_branch": self.config["include_non_enrolled_branch"],
             "slug": self.config["slug"],
@@ -387,22 +433,15 @@ class TelemetryClient:
             "available_on_android": self.config["histograms"][histogram][
                 "available_on_android"
             ],
-            "blacklist": isp_blacklist,
         }
         query = t.render(context)
-        # Remove empty lines before returning
-        query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
+        query = clean_sql_query(query)
         self.queries.append({"name": f"Histogram: {histogram}", "query": query})
         return query
 
     def generateHistogramQuery_OS_segments_glean(self, histogram):
         t = get_template("experiment/glean/histogram_os_segments.sql")
 
-        isp_blacklist = []
-        if "isp_blacklist" in self.config:
-            with open(self.config["isp_blacklist"], "r") as file:
-                isp_blacklist = [line.strip() for line in file]
-
         context = {
             "include_non_enrolled_branch": self.config["include_non_enrolled_branch"],
             "slug": self.config["slug"],
@@ -416,11 +455,9 @@ class TelemetryClient:
             "available_on_android": self.config["histograms"][histogram][
                 "available_on_android"
             ],
-            "blacklist": isp_blacklist,
         }
         query = t.render(context)
-        # Remove empty lines before returning
-        query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
+        query = clean_sql_query(query)
         self.queries.append({"name": f"Histogram: {histogram}", "query": query})
         return query
 
@@ -459,8 +496,7 @@ class TelemetryClient:
             "channel": self.config["branches"][0]["channel"],
         }
         query = t.render(context)
-        # Remove empty lines before returning
-        query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
+        query = clean_sql_query(query)
         self.queries.append({"name": f"Histogram: {histogram}", "query": query})
         return query
 
@@ -499,8 +535,7 @@ class TelemetryClient:
         }
 
         query = t.render(context)
-        # Remove empty lines before returning
-        query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
+        query = clean_sql_query(query)
         self.queries.append({"name": f"Histogram: {histogram}", "query": query})
         return query
 
@@ -530,23 +565,31 @@ class TelemetryClient:
             "segments": segmentInfo,
         }
         query = t.render(context)
-        # Remove empty lines before returning
-        query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
+        query = clean_sql_query(query)
         self.queries.append({"name": f"Histogram: {histogram}", "query": query})
         return query
 
-    def checkForExistingData(self, filename):
-        if self.skipCache:
-            df = None
-        else:
-            try:
-                df = pd.read_pickle(filename)
-                print(f"Found local data in {filename}")
-            except Exception:
-                df = None
-        return df
+    def checkForExistingData(self, filename: str) -> Optional[pd.DataFrame]:
+        """
+        Check for existing cached data.
 
-    def getHistogramDataNonExperiment(self, config, histogram):
+        Args:
+            filename: Path to cached file
+
+        Returns:
+            DataFrame if cached data exists, None otherwise
+        """
+        if self.skipCache:
+            return None
+
+        try:
+            df = pd.read_pickle(filename)
+            print(f"Found local data in {filename}")
+            return df
+        except Exception:
+            return None
+
+    def getHistogramDataNonExperiment(self, config: Dict[str, Any], histogram: str) -> pd.DataFrame:
         slug = config["slug"]
         hist_name = histogram.split(".")[-1]
         filename = os.path.join(self.dataDir, f"{slug}-{hist_name}.pkl")
@@ -575,7 +618,7 @@ class TelemetryClient:
         df.to_pickle(filename)
         return df
 
-    def getHistogramData(self, config, histogram):
+    def getHistogramData(self, config: Dict[str, Any], histogram: str) -> pd.DataFrame:
         slug = config["slug"]
         hist_name = histogram.split(".")[-1]
         filename = os.path.join(self.dataDir, f"{slug}-{hist_name}.pkl")
@@ -601,7 +644,7 @@ class TelemetryClient:
         df.to_pickle(filename)
         return df
 
-    def getPageloadEventDataNonExperiment(self, metric):
+    def getPageloadEventDataNonExperiment(self, metric: str) -> pd.DataFrame:
         slug = self.config["slug"]
         filename = os.path.join(self.dataDir, f"{slug}-pageload-events-{metric}.pkl")
 
@@ -622,7 +665,7 @@ class TelemetryClient:
         df.to_pickle(filename)
         return df
 
-    def getPageloadEventData(self, metric):
+    def getPageloadEventData(self, metric: str) -> pd.DataFrame:
         slug = self.config["slug"]
         filename = os.path.join(self.dataDir, f"{slug}-pageload-events-{metric}.pkl")
 

@@ -20,9 +20,6 @@ with
 {% for condition in branch.glean_conditions %}
         {{condition}}
 {% endfor %}
-        {% for isp in blacklist %}
-        AND metadata.isp.name != "{{isp}}"
-        {% endfor %}
 ),
 {{branch.name}}_android as (
     SELECT
@@ -42,9 +39,6 @@ with
 {% for condition in branch.glean_conditions %}
         {{condition}}
 {% endfor %}
-        {% for isp in blacklist %}
-        AND metadata.isp.name != "{{isp}}"
-        {% endfor %}
 )
 {% if branch.last == False %}
 ,

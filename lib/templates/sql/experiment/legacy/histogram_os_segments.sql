@@ -14,9 +14,6 @@ with json_strings as (
         AND {{histogram}} is not null
         AND payload.processes.parent.scalars.browser_engagement_total_uri_count > 0
         AND mozfun.map.get_key(environment.experiments, "{{slug}}").branch is not null
-        {% for isp in blacklist %}
-        AND metadata.isp.name != "{{isp}}"
-        {% endfor %}
 )
 ,
 keyValuePairs as (
