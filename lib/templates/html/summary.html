@@ -116,15 +116,9 @@
       <tr>
         <td rowspan={{metric.rowspan}} style="{{metric.style}}">
           <div class="tooltip">
-          {% if metric.is_crash_metric %}
           <a href="#{{segment.name}}-{{metric.name}}">
             {{metric.name}}
           </a>
-          {% else %}
-          <a href="#{{segment.name}}-{{metric.name}}-mean">
-            {{metric.name}}
-          </a>
-          {% endif %}
           <span class="tooltiptext">
             {{metric.desc}}
           </span>
@@ -142,7 +136,7 @@
     {% for metric in segment.categorical_metrics %}
     <td style="{{metric.style}}" rowspan={{metric.name_rowspan}}>
           <div class="tooltip">
-            <a href="#{{segment.name}}-{{metric.name}}-categorical">
+            <a href="#{{segment.name}}-{{metric.name}}">
               {{metric.name}}
             </a>
             <span class="tooltiptext">

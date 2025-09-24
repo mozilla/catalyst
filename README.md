@@ -65,7 +65,7 @@ Run the complete test suite including:
 - Unit tests (21 comprehensive tests)
 - Coverage reporting (HTML + terminal output)
 
-### 🎨 `just lint-fix`
+### 🎨 `just lint`
 Automatically fix code formatting issues using Black
 
 ### Binary Commands

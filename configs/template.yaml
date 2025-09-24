@@ -20,7 +20,7 @@ segments:
 
 # Histogram metrics to analyze (optional)
 histograms:
-  - payload.histograms.memory_total
+  - metrics.memory_distribution.memory_total
   - metrics.timing_distribution.performance_pageload_fcp
   - metrics.timing_distribution.performance_pageload_load_time
   - metrics.timing_distribution.perf_largest_contentful_paint
@@ -29,7 +29,7 @@ histograms:
 events:
   # Include crash events to track total crash counts for each experiment branch
   - crash
-  
+
   # Include pageload events with custom metric configurations
   # If pageload is included without sub-metrics, defaults will be used
   - pageload:
@@ -38,4 +38,6 @@ events:
       lcp_time:
         max: 30000
       load_time:
+        max: 30000
+      response_time:
         max: 30000

@@ -407,7 +407,7 @@ def promptForMaxDuration(config: Dict[str, Any], args: Any) -> None:
       args: Arguments object that may contain max_duration_days
     """
     # Skip if max_duration_days is already set
-    if hasattr(args, 'max_duration_days') and args.max_duration_days is not None:
+    if hasattr(args, "max_duration_days") and args.max_duration_days is not None:
         return
 
     # Skip if not a release channel
@@ -429,20 +429,32 @@ def promptForMaxDuration(config: Dict[str, Any], args: Any) -> None:
 
     # Prompt if duration is greater than 7 days
     if duration_days > 7:
-        print(f"\n⚠️  WARNING: This is a release channel experiment with a {duration_days}-day duration.")
+        print(
+            f"\n⚠️  WARNING: This is a release channel experiment with a {duration_days}-day duration."
+        )
         print(f"   Date range: {config['startDate']} to {config['endDate']}")
-        print("   Collecting data for the full duration may take a long time and incur high BigQuery costs.")
+        print(
+            "   Collecting data for the full duration may take a long time and incur high BigQuery costs."
+        )
         print("   (You can also set a custom duration using --max-duration-days=N)")
         print()
 
-        response = input("   Would you like to restrict data collection to the last 7 days? [Y/n]: ").strip().lower()
+        response = (
+            input(
+                "   Would you like to restrict data collection to the last 7 days? [Y/n]: "
+            )
+            .strip()
+            .lower()
+        )
 
         if response in ["", "y", "yes"]:
             args.max_duration_days = 7
             print("   ✓ Data collection will be limited to the last 7 days.")
         else:
             args.max_duration_days = None
-            print(f"   ✓ Data collection will proceed for the full {duration_days}-day duration.")
+            print(
+                f"   ✓ Data collection will proceed for the full {duration_days}-day duration."
+            )
         print()
 
 
@@ -468,7 +480,9 @@ def applyMaxDuration(config: Dict[str, Any], max_duration_days: Optional[int]) -
     # Only adjust if the new start date is later than the original
     if adjusted_start_date > original_start_date:
         config["startDate"] = adjusted_start_date.strftime("%Y-%m-%d")
-        print(f"Limiting data collection to last {max_duration_days} days: {config['startDate']} to {config['endDate']}")
+        print(
+            f"Limiting data collection to last {max_duration_days} days: {config['startDate']} to {config['endDate']}"
+        )
 
 
 def parseConfigFile(configFile: str) -> Dict[str, Any]:

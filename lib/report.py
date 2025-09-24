@@ -719,39 +719,28 @@ class ReportGenerator:
         self,
         segment,
         metric,
-        metric_type,
-        template_name="crash_events.html",
+        template_name="scalar.html",
         value_key="count",
     ):
-        """Generic function to create comparisons for scalar values like counts.
+        """Create comparisons for scalar values.
 
         Args:
-            segment: The segment being analyzed
-            metric: The metric name
-            metric_type: The type of metric (e.g., 'crash_event_metrics')
+            segment: The segment being analyzed (e.g., 'Windows', 'Mac')
+            metric: The metric name (e.g., 'total_crashes')
             template_name: The HTML template to use for rendering
             value_key: The key to use for the scalar value (e.g., 'count')
         """
         t = get_template(template_name)
         control = self.data["branches"][0]
 
-        # For regular histograms, use the shortened name
-        if metric_type == "histograms" and not metric.startswith(
-            ("pageload_", "crash_")
-        ):
-            data_key = metric.split(".")[-1]
-        else:
-            data_key = metric
-
         datasets = []
 
         for branch in self.data["branches"]:
-            scalar_value = self.data[branch][segment][metric_type][data_key].get(
-                value_key, 0
-            )
-            desc = self.data[branch][segment][metric_type][data_key].get(
-                "desc", f"Total {metric}"
-            )
+            # Access scalar data using consistent structure: data[branch][segment]["scalar"][metric]
+            metric_data = self.data[branch][segment]["scalar"][metric]
+
+            scalar_value = metric_data.get(value_key, 0)
+            desc = metric_data.get("desc", f"Total {metric}")
 
             dataset = {
                 "branch": branch,
@@ -761,15 +750,12 @@ class ReportGenerator:
             }
 
             if branch != control:
-                control_value = self.data[control][segment][metric_type][data_key].get(
-                    value_key, 0
-                )
-                relative_change = self.data[branch][segment][metric_type][data_key].get(
-                    "relative_change", 0
-                )
-                absolute_diff = self.data[branch][segment][metric_type][data_key].get(
-                    "absolute_difference", 0
-                )
+                # Access control data using same consistent structure
+                control_metric_data = self.data[control][segment]["scalar"][metric]
+
+                control_value = control_metric_data.get(value_key, 0)
+                relative_change = metric_data.get("relative_change", 0)
+                absolute_diff = metric_data.get("absolute_difference", 0)
 
                 dataset.update(
                     {
@@ -799,19 +785,20 @@ class ReportGenerator:
 
             datasets.append(dataset)
 
+        # Get metric metadata from the first dataset
+        first_dataset = datasets[0] if datasets else {}
+        metric_title = first_dataset.get("desc", metric)
+        value_label = "Count"  # Default label, could be made configurable
+
         context = {
             "segment": segment,
             "metric": metric,
+            "metric_title": metric_title,
+            "value_label": value_label,
             "datasets": datasets,
             "control": control,
         }
         self.doc(t.render(context))
-
-    def createCrashEventComparison(self, segment, metric, metric_type):
-        """Create comparison for crash events using the generic scalar comparison function."""
-        self.createScalarComparison(
-            segment, metric, metric_type, "crash_events.html", "count"
-        )
 
     def createMeanComparison(self, segment, metric, metric_type):
         t = get_template("mean.html")
@@ -895,26 +882,16 @@ class ReportGenerator:
 
         control = self.data["branches"][0]
 
-        # For regular histograms, use the shortened name
-        if metric_type == "histograms" and not metric.startswith(
-            ("pageload_", "crash_")
-        ):
-            data_key = metric.split(".")[-1]
-        else:
-            data_key = metric
-
-        n_elem = len(self.data[control][segment][metric_type][data_key]["ratios"])
+        n_elem = len(self.data[control][segment][metric_type][metric]["ratios"])
         if n_elem <= 10:
             indices = set(range(0, n_elem - 1))
 
         for branch in self.data["branches"]:
             if branch == control:
                 continue
-            uplift = self.data[branch][segment][metric_type][data_key]["uplift"]
-            ratios = self.data[branch][segment][metric_type][data_key]["ratios"]
-            ratios_control = self.data[control][segment][metric_type][data_key][
-                "ratios"
-            ]
+            uplift = self.data[branch][segment][metric_type][metric]["uplift"]
+            ratios = self.data[branch][segment][metric_type][metric]["ratios"]
+            ratios_control = self.data[control][segment][metric_type][metric]["ratios"]
 
             for i in range(len(uplift)):
                 if abs(uplift[i]) > 0.01 and (
@@ -925,7 +902,7 @@ class ReportGenerator:
         datasets = []
         for branch in self.data["branches"]:
             ratios_branch = [
-                self.data[branch][segment][metric_type][data_key]["ratios"][i]
+                self.data[branch][segment][metric_type][metric]["ratios"][i]
                 for i in indices
             ]
             datasets.append(
@@ -937,31 +914,24 @@ class ReportGenerator:
 
             if branch != control:
                 ratios_control = [
-                    self.data[control][segment][metric_type][data_key]["ratios"][i]
+                    self.data[control][segment][metric_type][metric]["ratios"][i]
                     for i in indices
                 ]
                 uplift = [
-                    self.data[branch][segment][metric_type][data_key]["uplift"][i]
+                    self.data[branch][segment][metric_type][metric]["uplift"][i]
                     for i in indices
                 ]
                 datasets[-1]["uplift"] = uplift
 
         labels = [
-            self.data[control][segment][metric_type][data_key]["labels"][i]
+            self.data[control][segment][metric_type][metric]["labels"][i]
             for i in indices
         ]
-        # For regular histograms, use the shortened name for display
-        if metric_type == "histograms" and not metric.startswith(
-            ("pageload_", "crash_")
-        ):
-            display_metric = metric.split(".")[-1]
-        else:
-            display_metric = metric
 
         context = {
             "labels": labels,
             "datasets": datasets,
-            "metric": display_metric,
+            "metric": metric,
             "segment": segment,
         }
         self.doc(t.render(context))
@@ -974,7 +944,7 @@ class ReportGenerator:
 
         # Perform specific handling for scalar events
         if kind == "scalar":
-            self.createScalarComparison(segment, metric, metric_type)
+            self.createScalarComparison(segment, metric)
             return
 
         # Add mean comparison
@@ -1030,11 +1000,13 @@ class ReportGenerator:
                     break
 
         if not has_data:
-            print(f"  WARNING: Skipping chart generation for {segment}/{metric} ({data_type}) - no data available")
+            print(
+                f"  WARNING: Skipping chart generation for {segment}/{metric} ({data_type}) - no data available"
+            )
             return
 
         # Wrap content in cell container for proper layout
-        with self.doc.div(id=f"{segment}-{metric}-{data_type}", klass="cell"):
+        with self.doc.div(id=f"{segment}-{metric}", klass="cell"):
             # Add title for metric
             with self.doc.div(klass="title"):
                 self.doc(f"({segment}) - {metric}")
@@ -1064,22 +1036,15 @@ class ReportGenerator:
 
     def createScalarCharts(self, segment, metric):
         """Create all charts for scalar metrics."""
-        # Simplified - just basic table for now
-        pass
+        # Create scalar comparison table and chart
+        self.createScalarComparison(segment, metric)
 
     def createHistogramMetrics(self, segment):
         for hist in self.data["histograms"]:
             kind = self.data["histograms"][hist]["kind"]
-            if hist.startswith("pageload_"):
-                metric_title = f"pageload event: {hist.replace('pageload_', '')}"
-                metric_id = hist.replace("pageload_", "")
-            elif hist.startswith("crash_"):
-                metric_title = f"crash event: {hist.replace('crash_', '')}"
-                metric_id = hist.replace("crash_", "")
-            else:
-                metric = hist.split(".")[-1]
-                metric_title = metric
-                metric_id = metric
+            metric = hist.split(".")[-1]
+            metric_title = self.data["histograms"][hist].get("desc", metric)
+            metric_id = metric
 
             with self.doc.div(id=f"{segment}-{metric_id}", klass="cell"):
                 # Add title for metric

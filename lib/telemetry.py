@@ -21,8 +21,7 @@ def invalidDataSet(
     min_sample_size: int = 1000,
 ) -> bool:
     """
-    Remove any histograms that have empty datasets or insufficient sample sizes
-    in either a branch or branch segment.
+    Check if entire dataset is invalid (completely empty).
 
     Args:
         df: DataFrame containing telemetry data
@@ -32,45 +31,86 @@ def invalidDataSet(
         min_sample_size: Minimum required sample size per branch/segment
 
     Returns:
-        True if dataset is invalid (empty or insufficient data), False otherwise
+        True if dataset is completely invalid (empty), False otherwise
     """
     if df.empty:
         print(f"Empty dataset found, removing: {histogram}.")
         return True
 
+    # Check if all branches are empty
+    all_branches_empty = True
     for branch in branches:
         branch_name = branch["name"]
         branch_df = df[df["branch"] == branch_name]
+        if not branch_df.empty:
+            all_branches_empty = False
+            break
+
+    if all_branches_empty:
+        print(f"All branches empty, removing: {histogram}.")
+        return True
+
+    return False
+
+
+def getInvalidBranchSegments(
+    df: pd.DataFrame,
+    histogram: str,
+    branches: List[Dict[str, Any]],
+    segments: List[str],
+    min_sample_size: int = 1000,
+) -> List[tuple]:
+    """
+    Identify which specific branch/segment combinations have invalid data.
+
+    Args:
+        df: DataFrame containing telemetry data
+        histogram: Name of the histogram being validated
+        branches: List of branch configurations
+        segments: List of segment names
+        min_sample_size: Minimum required sample size per branch/segment
+
+    Returns:
+        List of (branch_name, segment) tuples that should be excluded
+    """
+    invalid_combinations = []
+
+    for branch in branches:
+        branch_name = branch["name"]
+        branch_df = df[df["branch"] == branch_name]
+
         if branch_df.empty:
-            print(
-                f"Empty dataset found for branch={branch_name}, removing: {histogram}."
-            )
-            return True
+            # Entire branch is empty - mark all segments as invalid
+            for segment in segments:
+                if segment != "All":
+                    invalid_combinations.append((branch_name, segment))
+            continue
+
         for segment in segments:
             if segment == "All":
                 continue
+
             branch_segment_df = branch_df[branch_df["segment"] == segment]
+
             if branch_segment_df.empty:
                 print(
-                    f"Empty dataset found for segment={segment}, removing: {histogram}."
+                    f"  WARNING: Skipping {branch_name}/{segment}: {histogram} - no data available"
                 )
-                return True
+                invalid_combinations.append((branch_name, segment))
+                continue
 
             # Check minimum sample size for histograms and pageload events
             if "counts" in branch_segment_df.columns:
                 total_samples = branch_segment_df["counts"].sum()
                 if total_samples < min_sample_size:
                     print(
-                        f"Insufficient sample size for {branch_name}/{segment}: {histogram} "
-                        f"(found {total_samples}, need {min_sample_size}), removing."
+                        f"  WARNING: Skipping {branch_name}/{segment}: {histogram} - "
+                        f"insufficient sample size (found {total_samples}, need {min_sample_size})"
                     )
-                    return True
-            # Check minimum sample size for crash events
-            elif "crash_count" in branch_segment_df.columns:
-                # For crash events, we don't enforce minimum sample size since 0 crashes is meaningful
-                pass
+                    invalid_combinations.append((branch_name, segment))
+            # For crash events, we don't enforce minimum sample size since 0 crashes is meaningful
 
-    return False
+    return invalid_combinations
 
 
 def segments_are_all_OS(segments: List[str]) -> bool:
@@ -129,8 +169,18 @@ class TelemetryClient:
         event_metrics: Dict[str, pd.DataFrame],
         histograms: Dict[str, pd.DataFrame],
         crash_metrics: Dict[str, pd.DataFrame],
+        invalid_combinations: Dict[str, List[tuple]] = None,
     ) -> None:
+        if invalid_combinations is None:
+            invalid_combinations = {}
+
         for histogram in self.config["histograms"]:
+            # Skip this branch/segment if it's invalid for this histogram
+            histogram_key = f"histogram_{histogram}"
+            if histogram_key in invalid_combinations:
+                if (branch, segment) in invalid_combinations[histogram_key]:
+                    continue
+
             df = histograms[histogram]
             if segment == "All":
                 subset = (
@@ -205,6 +255,12 @@ class TelemetryClient:
             print(f"    segment={segment} len(histogram: {histogram}) = ", len(buckets))
 
         for metric in self.config["pageload_event_metrics"]:
+            # Skip this branch/segment if it's invalid for this pageload metric
+            pageload_key = f"pageload_{metric}"
+            if pageload_key in invalid_combinations:
+                if (branch, segment) in invalid_combinations[pageload_key]:
+                    continue
+
             df = event_metrics[metric]
             if segment == "All":
                 subset = (
@@ -230,6 +286,16 @@ class TelemetryClient:
             )
 
         for metric in self.config["crash_event_metrics"]:
+            # Skip this metric if it was filtered out during data loading (no data available)
+            if metric not in crash_metrics:
+                continue
+
+            # Skip this branch/segment if it's invalid for this crash metric
+            crash_key = f"crash_{metric}"
+            if crash_key in invalid_combinations:
+                if (branch, segment) in invalid_combinations[crash_key]:
+                    continue
+
             df = crash_metrics[metric]
             if segment == "All":
                 subset = df[df["branch"] == branch][["crash_count"]].sum()
@@ -260,35 +326,57 @@ class TelemetryClient:
             return self.getResultsForNonExperiment()
 
     def getResultsForNonExperiment(self):
+        # Track invalid branch/segment combinations for each metric
+        invalid_combinations = {}
+
         # Get data for each pageload event metric.
         event_metrics = {}
         for metric in self.config["pageload_event_metrics"]:
-            event_metrics[metric] = self.getPageloadEventDataNonExperiment(metric)
-            print(event_metrics[metric])
+            df = self.getPageloadEventDataNonExperiment(metric)
+            print(df)
+
+            # Remove pageload events that have no data.
+            if invalidDataSet(
+                df,
+                f"pageload event: {metric}",
+                self.config["branches"],
+                self.config["segments"],
+            ):
+                continue
+
+            event_metrics[metric] = df
+            invalid_combinations[f"pageload_{metric}"] = getInvalidBranchSegments(
+                df,
+                f"pageload event: {metric}",
+                self.config["branches"],
+                self.config["segments"],
+            )
 
         # Get data for each crash event metric.
         crash_metrics = {}
-        crash_remove = []
         for metric in self.config["crash_event_metrics"]:
             df = self.getCrashEventDataNonExperiment(metric)
             print(df)
 
             # Remove crash events that have no data.
             if invalidDataSet(
-                df, f"crash event: {metric}", self.config["branches"], self.config["segments"]
+                df,
+                f"crash event: {metric}",
+                self.config["branches"],
+                self.config["segments"],
             ):
-                crash_remove.append(metric)
                 continue
-            crash_metrics[metric] = df
 
-        # Remove invalid crash event metrics from config
-        for metric in crash_remove:
-            if metric in self.config["crash_event_metrics"]:
-                del self.config["crash_event_metrics"][metric]
+            crash_metrics[metric] = df
+            invalid_combinations[f"crash_{metric}"] = getInvalidBranchSegments(
+                df,
+                f"crash event: {metric}",
+                self.config["branches"],
+                self.config["segments"],
+            )
 
         # Get data for each histogram in this segment.
         histograms = {}
-        remove = []
         for histogram in self.config["histograms"]:
             df = self.getHistogramDataNonExperiment(self.config, histogram)
             print(df)
@@ -297,13 +385,12 @@ class TelemetryClient:
             if invalidDataSet(
                 df, histogram, self.config["branches"], self.config["segments"]
             ):
-                remove.append(histogram)
                 continue
-            histograms[histogram] = df
 
-        for hist in remove:
-            if hist in self.config["histograms"]:
-                del self.config["histograms"][hist]
+            histograms[histogram] = df
+            invalid_combinations[f"histogram_{histogram}"] = getInvalidBranchSegments(
+                df, histogram, self.config["branches"], self.config["segments"]
+            )
 
         # Combine histogram and pageload event results.
         results = {}
@@ -329,41 +416,65 @@ class TelemetryClient:
                     event_metrics,
                     histograms,
                     crash_metrics,
+                    invalid_combinations,
                 )
 
         results["queries"] = self.queries
         return results
 
     def getResultsForExperiment(self):
+        # Track invalid branch/segment combinations for each metric
+        invalid_combinations = {}
+
         # Get data for each pageload event metric.
         event_metrics = {}
         for metric in self.config["pageload_event_metrics"]:
-            event_metrics[metric] = self.getPageloadEventData(metric)
-            print(event_metrics[metric])
+            df = self.getPageloadEventData(metric)
+            print(df)
+
+            # Remove pageload events that have no data.
+            if invalidDataSet(
+                df,
+                f"pageload event: {metric}",
+                self.config["branches"],
+                self.config["segments"],
+            ):
+                # Completely invalid - skip this metric
+                continue
+
+            event_metrics[metric] = df
+            invalid_combinations[f"pageload_{metric}"] = getInvalidBranchSegments(
+                df,
+                f"pageload event: {metric}",
+                self.config["branches"],
+                self.config["segments"],
+            )
 
         # Get data for each crash event metric.
         crash_metrics = {}
-        crash_remove = []
         for metric in self.config["crash_event_metrics"]:
             df = self.getCrashEventData(metric)
             print(df)
 
             # Remove crash events that have no data.
             if invalidDataSet(
-                df, f"crash event: {metric}", self.config["branches"], self.config["segments"]
+                df,
+                f"crash event: {metric}",
+                self.config["branches"],
+                self.config["segments"],
             ):
-                crash_remove.append(metric)
                 continue
-            crash_metrics[metric] = df
 
-        # Remove invalid crash event metrics from config
-        for metric in crash_remove:
-            if metric in self.config["crash_event_metrics"]:
-                del self.config["crash_event_metrics"][metric]
+            crash_metrics[metric] = df
+            invalid_combinations[f"crash_{metric}"] = getInvalidBranchSegments(
+                df,
+                f"crash event: {metric}",
+                self.config["branches"],
+                self.config["segments"],
+            )
 
         # Get data for each histogram in this segment.
         histograms = {}
-        remove = []
         for histogram in self.config["histograms"]:
             df = self.getHistogramData(self.config, histogram)
 
@@ -371,15 +482,12 @@ class TelemetryClient:
             if invalidDataSet(
                 df, histogram, self.config["branches"], self.config["segments"]
             ):
-                remove.append(histogram)
                 continue
-            histograms[histogram] = df
 
-        # Remove invalid histogram data.
-        for hist in remove:
-            if hist in self.config["histograms"]:
-                print(f"Empty dataset found, removing: {histogram}.")
-                del self.config["histograms"][hist]
+            histograms[histogram] = df
+            invalid_combinations[f"histogram_{histogram}"] = getInvalidBranchSegments(
+                df, histogram, self.config["branches"], self.config["segments"]
+            )
 
         # Combine histogram and pageload event results.
         results = {}
@@ -405,6 +513,7 @@ class TelemetryClient:
                     event_metrics,
                     histograms,
                     crash_metrics,
+                    invalid_combinations,
                 )
 
         results["queries"] = self.queries

@@ -865,16 +865,22 @@ class TestSQLQueryGeneration(unittest.TestCase):
 
         # Test histogram query
         histogram = "metrics.timing_distribution.performance_pageload_fcp"
-        histogram_query = telemetry_client.generateHistogramQuery_OS_segments_glean(histogram)
+        histogram_query = telemetry_client.generateHistogramQuery_OS_segments_glean(
+            histogram
+        )
 
         self.assertIsNotNone(histogram_query, "Histogram query generation failed")
 
         # Verify the histogram query contains the adjusted dates
         self.assertIn(
-            "2024-07-23", histogram_query, "Histogram query should contain adjusted start date (2024-07-23)"
+            "2024-07-23",
+            histogram_query,
+            "Histogram query should contain adjusted start date (2024-07-23)",
         )
         self.assertIn(
-            "2024-07-30", histogram_query, "Histogram query should contain original end date (2024-07-30)"
+            "2024-07-30",
+            histogram_query,
+            "Histogram query should contain original end date (2024-07-30)",
         )
         self.assertNotIn(
             "2024-07-01",
@@ -883,16 +889,22 @@ class TestSQLQueryGeneration(unittest.TestCase):
         )
 
         # Test pageload event query
-        pageload_query = telemetry_client.generatePageloadEventQuery_OS_segments("fcp_time")
+        pageload_query = telemetry_client.generatePageloadEventQuery_OS_segments(
+            "fcp_time"
+        )
 
         self.assertIsNotNone(pageload_query, "Pageload event query generation failed")
 
         # Verify the pageload event query contains the adjusted dates
         self.assertIn(
-            "2024-07-23", pageload_query, "Pageload query should contain adjusted start date (2024-07-23)"
+            "2024-07-23",
+            pageload_query,
+            "Pageload query should contain adjusted start date (2024-07-23)",
         )
         self.assertIn(
-            "2024-07-30", pageload_query, "Pageload query should contain original end date (2024-07-30)"
+            "2024-07-30",
+            pageload_query,
+            "Pageload query should contain original end date (2024-07-30)",
         )
         self.assertNotIn(
             "2024-07-01",
@@ -901,16 +913,22 @@ class TestSQLQueryGeneration(unittest.TestCase):
         )
 
         # Test crash event query
-        crash_query = telemetry_client.generateCrashEventQuery_OS_segments("total_crashes")
+        crash_query = telemetry_client.generateCrashEventQuery_OS_segments(
+            "total_crashes"
+        )
 
         self.assertIsNotNone(crash_query, "Crash event query generation failed")
 
         # Verify the crash event query contains the adjusted dates
         self.assertIn(
-            "2024-07-23", crash_query, "Crash query should contain adjusted start date (2024-07-23)"
+            "2024-07-23",
+            crash_query,
+            "Crash query should contain adjusted start date (2024-07-23)",
         )
         self.assertIn(
-            "2024-07-30", crash_query, "Crash query should contain original end date (2024-07-30)"
+            "2024-07-30",
+            crash_query,
+            "Crash query should contain original end date (2024-07-30)",
         )
         self.assertNotIn(
             "2024-07-01",
@@ -924,8 +942,16 @@ class TestSQLQueryGeneration(unittest.TestCase):
             ("pageload", pageload_query),
             ("crash", crash_query),
         ]:
-            self.assertNotIn("{{", query, f"{query_name} query: Template syntax not fully substituted")
-            self.assertNotIn("}}", query, f"{query_name} query: Template syntax not fully substituted")
+            self.assertNotIn(
+                "{{",
+                query,
+                f"{query_name} query: Template syntax not fully substituted",
+            )
+            self.assertNotIn(
+                "}}",
+                query,
+                f"{query_name} query: Template syntax not fully substituted",
+            )
 
         # Validate all queries
         self.validate_sql_basic_checks(histogram_query, "max_duration_histogram_test")

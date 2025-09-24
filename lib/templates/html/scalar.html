@@ -1,7 +1,7 @@
 {% autoescape off %}
-<div class="chart"><canvas height="250px" id="{{segment}}-{{metric}}-crash"></canvas></div>
+<div class="chart"><canvas height="250px" id="{{segment}}-{{metric}}-scalar"></canvas></div>
 <script>
-  ctx = document.getElementById('{{segment}}-{{metric}}-crash');
+  ctx = document.getElementById('{{segment}}-{{metric}}-scalar');
 
   new Chart(ctx, {
     type: 'bar',
@@ -26,9 +26,9 @@
             'rgba(54, 162, 235, 0.6)',  // Blue for control
             {% else %}
               {% if dataset.relative_change >= 50 %}
-            'rgba(255, 99, 132, 0.6)',  // Red for crash increase (bad)
+            'rgba(255, 99, 132, 0.6)',  // Red for increase (neutral)
               {% elif dataset.relative_change <= -50 %}
-            'rgba(75, 192, 192, 0.6)',  // Green for crash decrease (good)
+            'rgba(75, 192, 192, 0.6)',  // Green for decrease (neutral)
               {% else %}
             'rgba(255, 206, 86, 0.6)',  // Yellow for minor changes
               {% endif %}
@@ -64,8 +64,8 @@
             anchor: 'end',
             align: 'top',
             formatter: (n) => {
-                return n.hasOwnProperty('change') 
-                  ?  n.y + " (" + n.change + ")" 
+                return n.hasOwnProperty('change')
+                  ?  n.y + " (" + n.change + ")"
                   :  n.y.toString();
             },
             font: {
@@ -79,7 +79,7 @@
             },
           title: {
               display: true,
-              text: ["{{metric}} (crash events)", "segment: {{segment}}"]
+              text: ["{{metric_title}}", "segment: {{segment}}"]
             }
       },
       scales: {
@@ -87,7 +87,7 @@
           grace: '25%',
           beginAtZero: true,
           title: {
-            text: "Crash Count",
+            text: "{{value_label}}",
             display: true
           }
         },
@@ -101,12 +101,12 @@
 
 <table border="1" cellspacing="0" cellpadding="0" class="stat-table">
   <thead>
-    <tr> 
+    <tr>
       <th>
         Branch
       </th>
       <th>
-        Crash Count
+        {{value_label}}
       </th>
       <th>
         Relative Change

@@ -106,12 +106,16 @@ def isValidMetricData(data, metric_name, branch, segment, source_section, data_t
         bins = data.get("bins", [])
         counts = data.get("counts", [])
         if not bins or not counts or sum(counts) == 0:
-            print(f"  WARNING: Skipping {branch}/{segment}: {source_section}.{metric_name} - no data available")
+            print(
+                f"  WARNING: Skipping {branch}/{segment}: {source_section}.{metric_name} - no data available"
+            )
             return False
     elif data_type == "scalar":
         scalar_value = data.get("crash_count", data.get("count", None))
         if scalar_value is None:
-            print(f"  WARNING: Skipping {branch}/{segment}: {source_section}.{metric_name} - no data available")
+            print(
+                f"  WARNING: Skipping {branch}/{segment}: {source_section}.{metric_name} - no data available"
+            )
             return False
 
     return True
@@ -149,7 +153,9 @@ def transformTelemetryDataByType(telemetryData, config):
                         "histograms", {}
                     ):
                         data = telemetryData[branch][segment]["histograms"][hist]
-                        if isValidMetricData(data, hist_name, branch, segment, "histograms", "numerical"):
+                        if isValidMetricData(
+                            data, hist_name, branch, segment, "histograms", "numerical"
+                        ):
                             transformedData["numerical"].append(
                                 {
                                     "branch": branch,
@@ -171,7 +177,14 @@ def transformTelemetryDataByType(telemetryData, config):
                         "histograms", {}
                     ):
                         data = telemetryData[branch][segment]["histograms"][hist]
-                        if isValidMetricData(data, hist_name, branch, segment, "histograms", "categorical"):
+                        if isValidMetricData(
+                            data,
+                            hist_name,
+                            branch,
+                            segment,
+                            "histograms",
+                            "categorical",
+                        ):
                             transformedData["categorical"].append(
                                 {
                                     "branch": branch,
@@ -194,8 +207,12 @@ def transformTelemetryDataByType(telemetryData, config):
                         "kind", "numerical"
                     )  # Default to numerical for backwards compatibility
 
-                    data = telemetryData[branch][segment]["pageload_event_metrics"][metric]
-                    if isValidMetricData(data, metric, branch, segment, "pageload_event_metrics", kind):
+                    data = telemetryData[branch][segment]["pageload_event_metrics"][
+                        metric
+                    ]
+                    if isValidMetricData(
+                        data, metric, branch, segment, "pageload_event_metrics", kind
+                    ):
                         transformedData[kind].append(
                             {
                                 "branch": branch,
@@ -219,7 +236,9 @@ def transformTelemetryDataByType(telemetryData, config):
                     )  # Default to scalar for backwards compatibility
 
                     data = telemetryData[branch][segment]["crash_event_metrics"][metric]
-                    if isValidMetricData(data, metric, branch, segment, "crash_event_metrics", kind):
+                    if isValidMetricData(
+                        data, metric, branch, segment, "crash_event_metrics", kind
+                    ):
                         transformedData[kind].append(
                             {
                                 "branch": branch,
@@ -290,7 +309,7 @@ def generate_report(args):
             parser.promptForMaxDuration(config, args)
 
             # Apply max duration limit if specified
-            if hasattr(args, 'max_duration_days'):
+            if hasattr(args, "max_duration_days"):
                 parser.applyMaxDuration(config, args.max_duration_days)
 
             # If the experiment is a rollout, then use the non-enrolled branch
@@ -314,7 +333,7 @@ def generate_report(args):
                 config["include_non_enrolled_branch"] = False
         else:
             # For non-experiments, apply max duration if specified
-            if hasattr(args, 'max_duration_days'):
+            if hasattr(args, "max_duration_days"):
                 parser.applyMaxDuration(config, args.max_duration_days)
 
         print("Using Config:")
