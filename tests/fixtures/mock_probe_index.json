@@ -10,6 +10,9 @@
         },
         "load_time": {
           "description": "Time between loadEventStart and navigationStart, in ms."
+        },
+        "response_time": {
+          "description": "Time between responseStart and navigationStart, in ms."
         }
       }
     },

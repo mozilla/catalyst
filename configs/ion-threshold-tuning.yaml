@@ -8,17 +8,18 @@ histograms:
 - payload.processes.content.histograms.input_event_response_ms
 - payload.processes.content.histograms.js_pageload_execution_ms
 - payload.processes.content.histograms.js_pageload_baseline_compile_ms
-pageload_event_metrics:
-  fcp_time:
-    max: 10000
-  load_time:
-    max: 30000
-  response_time:
-    max: 10000
-  js_exec_time:
-    max: 10000
 segments:
 - All
 - Windows
 - Linux
 - Mac
+events:
+- pageload:
+    fcp_time:
+      max: 10000
+    load_time:
+      max: 30000
+    response_time:
+      max: 10000
+    js_exec_time:
+      max: 10000

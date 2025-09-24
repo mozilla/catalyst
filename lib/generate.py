@@ -60,8 +60,11 @@ def getResultsForExperiment(slug, dataDir, config, skipCache):
         branch_names.append(config["branches"][i]["name"])
     config["branches"] = branch_names
 
+    # Transform telemetry data from section-based to data-type-based format
+    transformedData = transformTelemetryDataByType(telemetryData, config)
+
     analyzer = DataAnalyzer(config)
-    results = analyzer.processTelemetryData(telemetryData)
+    results = analyzer.processTelemetryData(transformedData)
 
     # Save the queries into the results and cache them.
     queriesFile = os.path.join(dataDir, f"{slug}-queries.json")
@@ -83,6 +86,153 @@ def checkForLocalResults(resultsFile):
             results = json.load(f)
             return results
     return None
+
+
+def isValidMetricData(data, metric_name, branch, segment, source_section, data_type):
+    """Validate that metric data contains actual measurements.
+
+    Args:
+        data: The metric data to validate
+        metric_name: Name of the metric for warning messages
+        branch: Branch name for warning messages
+        segment: Segment name for warning messages
+        source_section: Source section for warning messages
+        data_type: Type of data (numerical, categorical, scalar)
+
+    Returns:
+        True if data is valid, False if empty/invalid
+    """
+    if data_type in ["numerical", "categorical"]:
+        bins = data.get("bins", [])
+        counts = data.get("counts", [])
+        if not bins or not counts or sum(counts) == 0:
+            print(f"  WARNING: Skipping {branch}/{segment}: {source_section}.{metric_name} - no data available")
+            return False
+    elif data_type == "scalar":
+        scalar_value = data.get("crash_count", data.get("count", None))
+        if scalar_value is None:
+            print(f"  WARNING: Skipping {branch}/{segment}: {source_section}.{metric_name} - no data available")
+            return False
+
+    return True
+
+
+def transformTelemetryDataByType(telemetryData, config):
+    """Transform telemetry data from section-based to data-type-based format.
+
+    Args:
+        telemetryData: Raw telemetry data organized by sections
+        config: Configuration with metric type information
+
+    Returns:
+        Transformed data organized by data types: {
+            "numerical": [...],
+            "categorical": [...],
+            "scalar": [...]
+        }
+    """
+    transformedData = {
+        "numerical": [],
+        "categorical": [],
+        "scalar": [],
+        "queries": telemetryData.get("queries", {}),  # Preserve queries
+    }
+
+    for branch in config["branches"]:
+        for segment in config["segments"]:
+            # Transform numerical histograms
+            for hist in config.get("histograms", {}):
+                if config["histograms"][hist]["kind"] == "numerical":
+                    # Use full histogram name as key, shortened name for display
+                    hist_name = hist.split(".")[-1]
+                    if hist in telemetryData.get(branch, {}).get(segment, {}).get(
+                        "histograms", {}
+                    ):
+                        data = telemetryData[branch][segment]["histograms"][hist]
+                        if isValidMetricData(data, hist_name, branch, segment, "histograms", "numerical"):
+                            transformedData["numerical"].append(
+                                {
+                                    "branch": branch,
+                                    "segment": segment,
+                                    "metric_name": hist_name,
+                                    "source_section": "histograms",
+                                    "source_key": hist,
+                                    "config": config["histograms"][hist],
+                                    "data": data,
+                                }
+                            )
+
+            # Transform categorical histograms
+            for hist in config.get("histograms", {}):
+                if config["histograms"][hist]["kind"] == "categorical":
+                    # Use full histogram name as key, shortened name for display
+                    hist_name = hist.split(".")[-1]
+                    if hist in telemetryData.get(branch, {}).get(segment, {}).get(
+                        "histograms", {}
+                    ):
+                        data = telemetryData[branch][segment]["histograms"][hist]
+                        if isValidMetricData(data, hist_name, branch, segment, "histograms", "categorical"):
+                            transformedData["categorical"].append(
+                                {
+                                    "branch": branch,
+                                    "segment": segment,
+                                    "metric_name": hist_name,
+                                    "source_section": "histograms",
+                                    "source_key": hist,
+                                    "config": config["histograms"][hist],
+                                    "data": data,
+                                }
+                            )
+
+            # Transform pageload event metrics (use annotated kind)
+            for metric in config.get("pageload_event_metrics", {}):
+                if metric in telemetryData.get(branch, {}).get(segment, {}).get(
+                    "pageload_event_metrics", {}
+                ):
+                    metric_config = config["pageload_event_metrics"][metric]
+                    kind = metric_config.get(
+                        "kind", "numerical"
+                    )  # Default to numerical for backwards compatibility
+
+                    data = telemetryData[branch][segment]["pageload_event_metrics"][metric]
+                    if isValidMetricData(data, metric, branch, segment, "pageload_event_metrics", kind):
+                        transformedData[kind].append(
+                            {
+                                "branch": branch,
+                                "segment": segment,
+                                "metric_name": metric,
+                                "source_section": "pageload_event_metrics",
+                                "source_key": metric,
+                                "config": metric_config,
+                                "data": data,
+                            }
+                        )
+
+            # Transform crash event metrics (use annotated kind)
+            for metric in config.get("crash_event_metrics", {}):
+                if metric in telemetryData.get(branch, {}).get(segment, {}).get(
+                    "crash_event_metrics", {}
+                ):
+                    metric_config = config["crash_event_metrics"][metric]
+                    kind = metric_config.get(
+                        "kind", "scalar"
+                    )  # Default to scalar for backwards compatibility
+
+                    data = telemetryData[branch][segment]["crash_event_metrics"][metric]
+                    if isValidMetricData(data, metric, branch, segment, "crash_event_metrics", kind):
+                        transformedData[kind].append(
+                            {
+                                "branch": branch,
+                                "segment": segment,
+                                "metric_name": metric,
+                                "source_section": "crash_event_metrics",
+                                "source_key": metric,
+                                "config": metric_config,
+                                "data": data,
+                            }
+                        )
+
+    return transformedData
 
 
 def generate_report(args):
@@ -117,7 +267,24 @@ def generate_report(args):
         if config["is_experiment"]:
             # Parse Nimbus API.
             api = parser.parseNimbusAPI(dataDir, slug, skipCache)
+
+            # Preserve startDate and endDate from config if they exist
+            config_start_date = config.get("startDate")
+            config_end_date = config.get("endDate")
+
+            # Convert date objects to string format if needed
+            if config_start_date is not None and hasattr(config_start_date, "strftime"):
+                config_start_date = config_start_date.strftime("%Y-%m-%d")
+            if config_end_date is not None and hasattr(config_end_date, "strftime"):
+                config_end_date = config_end_date.strftime("%Y-%m-%d")
+
             config = config | api
+
+            # Override API dates with config dates if provided
+            if config_start_date is not None:
+                config["startDate"] = config_start_date
+            if config_end_date is not None:
+                config["endDate"] = config_end_date
 
             # If the experiment is a rollout, then use the non-enrolled branch
             # as the control.

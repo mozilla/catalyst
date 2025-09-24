@@ -101,10 +101,14 @@ class TestStatisticalVerification(unittest.TestCase):
                 "channel": "release",
                 "segments": ["Windows"],  # Single segment for cleaner analysis
                 "histograms": ["metrics.timing_distribution.performance_pageload_fcp"],
-                "pageload_event_metrics": {
-                    "fcp_time": {"max": 10000},
-                    "load_time": {"max": 20000},
-                },
+                "events": [
+                    {
+                        "pageload": {
+                            "fcp_time": {"max": 10000},
+                            "load_time": {"max": 20000},
+                        }
+                    }
+                ],
             },
         )
 
@@ -207,8 +211,8 @@ class TestStatisticalVerification(unittest.TestCase):
 
         # Verify histogram statistics
         metric_name = "performance_pageload_fcp"
-        control_data = results["control"]["Windows"]["histograms"][metric_name]
-        treatment_data = results["treatment"]["Windows"]["histograms"][metric_name]
+        control_data = results["control"]["Windows"]["numerical"][metric_name]
+        treatment_data = results["treatment"]["Windows"]["numerical"][metric_name]
 
         # Check means (within 5% tolerance due to sampling variation)
         expected_control_mean = self.known_stats["histogram_stats"]["control"]["mean"]
@@ -333,14 +337,10 @@ class TestStatisticalVerification(unittest.TestCase):
         with open(results_file, "r") as f:
             results = json.load(f)
 
-        # Verify FCP event statistics
+        # Verify FCP event statistics (now in numerical data type)
         metric_name = "fcp_time"
-        control_data = results["control"]["Windows"]["pageload_event_metrics"][
-            metric_name
-        ]
-        treatment_data = results["treatment"]["Windows"]["pageload_event_metrics"][
-            metric_name
-        ]
+        control_data = results["control"]["Windows"]["numerical"][metric_name]
+        treatment_data = results["treatment"]["Windows"]["numerical"][metric_name]
 
         # Check means
         expected_control_mean = self.known_stats["fcp_event_stats"]["control"]["mean"]
@@ -383,9 +383,7 @@ class TestStatisticalVerification(unittest.TestCase):
 
         # Test statistical significance detection
         if "comparison" in results and "Windows" in results["comparison"]:
-            comparison = results["comparison"]["Windows"]["pageload_event_metrics"][
-                metric_name
-            ]
+            comparison = results["comparison"]["Windows"]["numerical"][metric_name]
 
             # With large sample sizes and significant differences, we should detect significance
             if "p_value" in comparison:
@@ -446,11 +444,8 @@ class TestStatisticalVerification(unittest.TestCase):
                         print(f"  {key}: {hist_comparison[key]}")
 
             # Check event metric comparison
-            if (
-                "pageload_event_metrics" in comparison
-                and "fcp_time" in comparison["pageload_event_metrics"]
-            ):
-                event_comparison = comparison["pageload_event_metrics"]["fcp_time"]
+            if "numerical" in comparison and "fcp_time" in comparison["numerical"]:
+                event_comparison = comparison["numerical"]["fcp_time"]
                 print(f"Event comparison keys: {list(event_comparison.keys())}")
 
                 for key in ["t_test", "mwu_test", "p_value", "effect_size"]:

@@ -11,17 +11,18 @@ histograms:
 - metrics.timing_distribution.performance_pageload_fcp
 - metrics.timing_distribution.perf_largest_contentful_paint
 - metrics.timing_distribution.performance_pageload_async_sheet_load
-pageload_event_metrics:
-  fcp_time:
-    max: 10000
-  load_time:
-    max: 30000
-  lcp_time:
-    max: 30000
-  response_time:
-    max: 10000
 segments:
 - All
 - Windows
 - Linux
 - Mac
+events:
+- pageload:
+    fcp_time:
+      max: 10000
+    load_time:
+      max: 30000
+    lcp_time:
+      max: 30000
+    response_time:
+      max: 10000

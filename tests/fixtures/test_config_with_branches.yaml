@@ -7,6 +7,7 @@ segments:
   - Linux
 histograms:
   - payload.histograms.memory_total
-pageload_event_metrics:
-  fcp_time:
-    max: 15000
+events:
+  - pageload:
+      fcp_time:
+        max: 15000

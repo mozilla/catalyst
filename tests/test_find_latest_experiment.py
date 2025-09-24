@@ -206,7 +206,7 @@ class TestFindLatestExperiment(unittest.TestCase):
 
         # Should return default histograms
         expected_histograms = [
-            "payload.histograms.memory_total",
+            "metrics.memory_distribution.memory_total",
             "metrics.timing_distribution.performance_pageload_fcp",
             "metrics.timing_distribution.performance_pageload_load_time",
             "metrics.timing_distribution.perf_largest_contentful_paint",

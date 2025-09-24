@@ -6,18 +6,19 @@ histograms:
 - payload.processes.content.histograms.perf_first_contentful_paint_ms
 - payload.processes.content.histograms.perf_first_contentful_paint_from_responsestart_ms
 - payload.processes.content.histograms.js_pageload_execution_ms
-pageload_event_metrics:
-  fcp_time:
-    max: 10000
-  load_time:
-    max: 30000
-  response_time:
-    max: 10000
-  js_exec_time:
-    max: 10000
 isp_blacklist: isp_blacklist.txt
 segments:
 - All
 - Windows
 - Linux
 - Mac
+events:
+- pageload:
+    fcp_time:
+      max: 10000
+    load_time:
+      max: 30000
+    response_time:
+      max: 10000
+    js_exec_time:
+      max: 10000

@@ -220,29 +220,21 @@ def createCategoricalTemplate():
     return template
 
 
+def createScalarTemplate():
+    template = {"desc": "", "count": 0, "n": 1}
+    return template
+
+
 def createResultsTemplate(config):
     template = {}
     for branch in config["branches"]:
         template[branch] = {}
         for segment in config["segments"]:
-            template[branch][segment] = {"histograms": {}, "pageload_event_metrics": {}}
-
-            for histogram in config["histograms"]:
-                hist_name = histogram.split(".")[-1]
-                if config["histograms"][histogram]["kind"] == "categorical":
-                    template[branch][segment]["histograms"][
-                        hist_name
-                    ] = createCategoricalTemplate()
-                else:
-                    template[branch][segment]["histograms"][
-                        hist_name
-                    ] = createNumericalTemplate()
-
-            for metric in config["pageload_event_metrics"]:
-                template[branch][segment]["pageload_event_metrics"][
-                    metric
-                ] = createNumericalTemplate()
-
+            template[branch][segment] = {
+                "numerical": {},
+                "categorical": {},
+                "scalar": {},
+            }
     return template
 
 
@@ -253,122 +245,166 @@ class DataAnalyzer:
         self.control = self.config["branches"][0]
         self.results = createResultsTemplate(config)
 
-        self.binVals = {}
-        for field in self.config["pageload_event_metrics"]:
-            self.binVals[field] = "auto"
+    def processTelemetryData(self, transformedData):
+        """Process transformed telemetry data organized by data types.
 
-    def processTelemetryData(self, telemetryData):
-        for branch in self.config["branches"]:
-            self.processTelemetryDataForBranch(telemetryData, branch)
+        Args:
+            transformedData: Data organized by types: {
+                "numerical": [...],
+                "categorical": [...],
+                "scalar": [...]
+            }
+        """
+        print("Processing unified data types...")
+
+        # Process each data type with unified algorithms
+        self.processNumericalMetrics(transformedData["numerical"])
+        self.processCategoricalMetrics(transformedData["categorical"])
+        self.processScalarMetrics(transformedData["scalar"])
+
         return self.results
 
-    def processTelemetryDataForBranch(self, data, branch):
-        self.processHistogramData(data, branch)
-        self.processPageLoadEventData(data, branch)
+    def processNumericalMetrics(self, numerical_metrics):
+        """Process all numerical metrics with unified algorithms."""
+        print(f"Processing {len(numerical_metrics)} numerical metrics")
 
-    def processNumericalHistogramData(self, hist, data, branch, segment):
-        hist_name = hist.split(".")[-1]
-        print(f"      processing numerical histogram: {hist}")
+        for metric_data in numerical_metrics:
+            branch = metric_data["branch"]
+            segment = metric_data["segment"]
+            metric_name = metric_data["metric_name"]
+            source_section = metric_data["source_section"]
+            config = metric_data["config"]
+            data = metric_data["data"]
 
-        # Calculate stats
-        bins = data[branch][segment]["histograms"][hist]["bins"]
-        counts = data[branch][segment]["histograms"][hist]["counts"]
+            print(f"  {branch}/{segment}: {source_section}.{metric_name}")
 
-        desc = self.config["histograms"][hist]["desc"]
-        self.results[branch][segment]["histograms"][hist_name]["desc"] = desc
+            # Store in results structure by data type
+            if metric_name not in self.results[branch][segment]["numerical"]:
+                self.results[branch][segment]["numerical"][
+                    metric_name
+                ] = createNumericalTemplate()
+            result_location = self.results[branch][segment]["numerical"][metric_name]
+            result_location["desc"] = config.get("desc", f"{metric_name}")
 
-        calculate_histogram_stats(
-            bins, counts, self.results[branch][segment]["histograms"][hist_name]
-        )
+            # Apply unified numerical analysis (works for both histograms and pageload events)
+            bins = data["bins"]
+            counts = data["counts"]
+            calculate_histogram_stats(bins, counts, result_location)
 
-        # Calculate statistical tests
-        if branch != self.control:
-            control_data = data[self.control][segment]["histograms"][hist]
-            branch_data = data[branch][segment]["histograms"][hist]
-            result = self.results[branch][segment]["histograms"][hist_name]
-            calculate_histogram_tests_subsampling(control_data, branch_data, result)
+            # Calculate statistical tests for non-control branches
+            if branch != self.control:
+                # Find corresponding control data
+                control_data = None
+                for control_metric in numerical_metrics:
+                    if (
+                        control_metric["branch"] == self.control
+                        and control_metric["segment"] == segment
+                        and control_metric["metric_name"] == metric_name
+                        and control_metric["source_section"] == source_section
+                    ):
+                        control_data = control_metric["data"]
+                        break
 
-    def processCategoricalHistogramData(self, hist, data, branch, segment):
-        hist_name = hist.split(".")[-1]
-        print(f"      processing categorical histogram: {hist}")
-        desc = self.config["histograms"][hist]["desc"]
-        labels = data[branch][segment]["histograms"][hist]["bins"]
-        counts = data[branch][segment]["histograms"][hist]["counts"]
-
-        self.results[branch][segment]["histograms"][hist_name]["desc"] = desc
-        self.results[branch][segment]["histograms"][hist_name]["labels"] = labels
-        self.results[branch][segment]["histograms"][hist_name]["counts"] = counts
-        total = sum(counts)
-
-        self.results[branch][segment]["histograms"][hist_name]["sum"] = total
-        ratios = [x / total for x in counts]
-        self.results[branch][segment]["histograms"][hist_name]["ratios"] = ratios
-
-        if branch != self.control:
-            ratios_control = self.results[self.control][segment]["histograms"][
-                hist_name
-            ]["ratios"]
-            uplift = []
-            for i in range(len(ratios)):
-                uplift.append((ratios[i] - ratios_control[i]) * 100)
-                self.results[branch][segment]["histograms"][hist_name][
-                    "uplift"
-                ] = uplift
-
-    def processHistogramData(self, data, branch):
-        print(f"Calculating histogram statistics for branch: {branch}")
-        for segment in self.config["segments"]:
-            print(f"  processing segment: {segment}")
-
-            for hist in self.config["histograms"]:
-                kind = self.config["histograms"][hist]["kind"]
-                if kind == "categorical":
-                    self.processCategoricalHistogramData(hist, data, branch, segment)
-                else:
-                    self.processNumericalHistogramData(hist, data, branch, segment)
-
-    def processPageLoadEventData(self, data, branch):
-        print(f"Calculating pageload event statistics for branch: {branch}")
-        for segment in self.config["segments"]:
-            print(f"  processing segment: {segment}")
-
-            for metric in self.config["pageload_event_metrics"]:
-                print(f"      processing metric: {metric}")
-
-                # Calculate stats
-                bins = data[branch][segment]["pageload_event_metrics"][metric]["bins"]
-                counts = data[branch][segment]["pageload_event_metrics"][metric][
-                    "counts"
-                ]
-                desc = self.config["pageload_event_metrics"][metric]["desc"]
-                self.results[branch][segment]["pageload_event_metrics"][metric][
-                    "desc"
-                ] = desc
-                calculate_histogram_stats(
-                    bins,
-                    counts,
-                    self.results[branch][segment]["pageload_event_metrics"][metric],
-                )
-
-                # Calculate statistical tests
-                if branch != self.control:
-                    control_data = data[self.control][segment][
-                        "pageload_event_metrics"
-                    ][metric]
-                    branch_data = data[branch][segment]["pageload_event_metrics"][
-                        metric
-                    ]
-                    result = self.results[branch][segment]["pageload_event_metrics"][
-                        metric
-                    ]
+                if control_data:
                     calculate_histogram_tests_subsampling(
-                        control_data, branch_data, result
+                        control_data, data, result_location
                     )
 
-                # Calculate statistical tests
-                # if branch != self.control:
-                #  control_data = self.results[self.control][segment][
-                #      "pageload_event_metrics"][metric]
-                #  branch_data = self.results[branch][segment][
-                #      "pageload_event_metrics"][metric]
-                #  calculate_histogram_ttest(bins, counts, branch_data, control_data)
+    def processCategoricalMetrics(self, categorical_metrics):
+        """Process all categorical metrics with unified algorithms."""
+        print(f"Processing {len(categorical_metrics)} categorical metrics")
+
+        for metric_data in categorical_metrics:
+            branch = metric_data["branch"]
+            segment = metric_data["segment"]
+            metric_name = metric_data["metric_name"]
+            source_section = metric_data["source_section"]
+            config = metric_data["config"]
+            data = metric_data["data"]
+
+            print(f"  {branch}/{segment}: {source_section}.{metric_name}")
+
+            # Store in results structure by data type
+            if metric_name not in self.results[branch][segment]["categorical"]:
+                self.results[branch][segment]["categorical"][
+                    metric_name
+                ] = createCategoricalTemplate()
+            result_location = self.results[branch][segment]["categorical"][metric_name]
+            result_location["desc"] = config.get("desc", f"{metric_name}")
+
+            # Apply unified categorical analysis
+            labels = data["bins"]
+            counts = data["counts"]
+            result_location["labels"] = labels
+            result_location["counts"] = counts
+            total = sum(counts)
+            result_location["sum"] = total
+            ratios = [x / total for x in counts]
+            result_location["ratios"] = ratios
+
+            # Calculate uplift for non-control branches
+            if branch != self.control:
+                # Find corresponding control data
+                if metric_name in self.results[self.control][segment]["categorical"]:
+                    control_result = self.results[self.control][segment]["categorical"][
+                        metric_name
+                    ]
+                    if "ratios" in control_result:
+                        control_ratios = control_result["ratios"]
+                        uplift = []
+                        for i in range(len(ratios)):
+                            uplift.append((ratios[i] - control_ratios[i]) * 100)
+                        result_location["uplift"] = uplift
+
+    def processScalarMetrics(self, scalar_metrics):
+        """Process all scalar metrics with unified algorithms."""
+        print(f"Processing {len(scalar_metrics)} scalar metrics")
+
+        for metric_data in scalar_metrics:
+            branch = metric_data["branch"]
+            segment = metric_data["segment"]
+            metric_name = metric_data["metric_name"]
+            source_section = metric_data["source_section"]
+            config = metric_data["config"]
+            data = metric_data["data"]
+
+            print(f"  {branch}/{segment}: {source_section}.{metric_name}")
+
+            # Store in results structure by data type
+            if metric_name not in self.results[branch][segment]["scalar"]:
+                self.results[branch][segment]["scalar"][
+                    metric_name
+                ] = createScalarTemplate()
+            result_location = self.results[branch][segment]["scalar"][metric_name]
+            result_location["desc"] = config.get("desc", f"Total {metric_name}")
+
+            # Apply unified scalar analysis
+            scalar_value = data.get("crash_count", data.get("count", 0))
+            result_location["count"] = scalar_value
+            result_location["n"] = 1
+
+            # Calculate comparative statistics for non-control branches
+            if branch != self.control:
+                # Find corresponding control data
+                if metric_name in self.results[self.control][segment]["scalar"]:
+                    control_result = self.results[self.control][segment]["scalar"][
+                        metric_name
+                    ]
+                    if "count" in control_result:
+                        control_value = control_result["count"]
+                        result_location["control_count"] = control_value
+                        result_location["treatment_count"] = scalar_value
+
+                        # Calculate relative change
+                        if control_value > 0:
+                            relative_change = (
+                                (scalar_value - control_value) / control_value
+                            ) * 100
+                        else:
+                            relative_change = scalar_value * 100
+
+                        result_location["relative_change"] = relative_change
+
+                        # Calculate absolute difference
+                        absolute_diff = scalar_value - control_value
+                        result_location["absolute_difference"] = absolute_diff

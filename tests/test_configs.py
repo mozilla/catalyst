@@ -53,15 +53,13 @@ class TestConfigValidation(unittest.TestCase):
                 field, config, f"{config_file}: Missing required field '{field}'"
             )
 
-        # Must have either histograms or pageload_event_metrics (or both)
+        # Must have either histograms or events (or both)
         has_histograms = "histograms" in config and config["histograms"]
-        has_pageload_metrics = (
-            "pageload_event_metrics" in config and config["pageload_event_metrics"]
-        )
+        has_events = "events" in config and config["events"]
 
         self.assertTrue(
-            has_histograms or has_pageload_metrics,
-            f"{config_file}: Must have either histograms or pageload_event_metrics (or both)",
+            has_histograms or has_events,
+            f"{config_file}: Must have either histograms or events (or both)",
         )
 
         # Validate histograms field format
@@ -71,24 +69,44 @@ class TestConfigValidation(unittest.TestCase):
                 histograms, list, f"{config_file}: histograms must be a list"
             )
 
-        # Validate pageload_event_metrics field format
-        if "pageload_event_metrics" in config:
-            metrics = config["pageload_event_metrics"]
-            self.assertIsInstance(
-                metrics, dict, f"{config_file}: pageload_event_metrics must be a dict"
-            )
+        # Validate events field format
+        if "events" in config:
+            events = config["events"]
+            self.assertIsInstance(events, list, f"{config_file}: events must be a list")
 
-            for metric_name, metric_config in metrics.items():
-                self.assertIsInstance(
-                    metric_config,
-                    dict,
-                    f"{config_file}: {metric_name} must be a dict with max parameter",
-                )
-                self.assertIn(
-                    "max",
-                    metric_config,
-                    f"{config_file}: {metric_name} must have 'max' parameter",
-                )
+            for event in events:
+                if isinstance(event, str):
+                    # Simple event like "crash"
+                    self.assertIn(
+                        event,
+                        ["crash", "pageload"],
+                        f"{config_file}: Unknown event type '{event}'",
+                    )
+                elif isinstance(event, dict):
+                    # Complex event like {"pageload": {...}}
+                    for event_type, event_config in event.items():
+                        self.assertIn(
+                            event_type,
+                            ["crash", "pageload"],
+                            f"{config_file}: Unknown event type '{event_type}'",
+                        )
+                        if event_type == "pageload" and event_config:
+                            # Validate pageload metrics
+                            for metric_name, metric_config in event_config.items():
+                                self.assertIsInstance(
+                                    metric_config,
+                                    dict,
+                                    f"{config_file}: {metric_name} must be a dict with max parameter",
+                                )
+                                self.assertIn(
+                                    "max",
+                                    metric_config,
+                                    f"{config_file}: {metric_name} must have 'max' parameter",
+                                )
+                else:
+                    self.fail(
+                        f"{config_file}: events items must be strings or dicts, got {type(event)}"
+                    )
 
         # Validate segments field
         if "segments" in config:
@@ -144,7 +162,7 @@ class TestConfigValidation(unittest.TestCase):
                 self._check_field_name_typos(config, config_file)
 
                 # Step 4: Run annotation if config has metrics (this catches field name errors)
-                if "pageload_event_metrics" in config or "histograms" in config:
+                if "events" in config or "histograms" in config:
                     annotateMetrics(config)
 
                 print(f"✅ {config_file}")

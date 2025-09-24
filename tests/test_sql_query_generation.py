@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from lib.telemetry import TelemetryClient
 from lib.generate import setupDjango
+from lib.parser import annotateMetrics
 from tests.test_data_utils import create_test_config, create_nimbus_api_cache
 
 try:
@@ -72,6 +73,9 @@ class TestSQLQueryGeneration(unittest.TestCase):
         # Add required fields for query generation
         if "is_experiment" not in config:
             config["is_experiment"] = True
+
+        # Annotate the config to convert events to legacy format
+        annotateMetrics(config)
 
         # Create Nimbus API cache
         experiment_config = {
@@ -272,10 +276,14 @@ class TestSQLQueryGeneration(unittest.TestCase):
             "startDate": "2024-03-01",
             "endDate": "2024-03-07",
             "segments": ["Windows", "Linux"],
-            "pageload_event_metrics": {
-                "fcp_time": {"min": 0, "max": 30000},
-                "load_time": {"min": 0, "max": 60000},
-            },
+            "events": [
+                {
+                    "pageload": {
+                        "fcp_time": {"max": 30000},
+                        "load_time": {"max": 60000},
+                    }
+                }
+            ],
             "include_non_enrolled_branch": False,
         }
 
@@ -350,7 +358,7 @@ class TestSQLQueryGeneration(unittest.TestCase):
             "endDate": "2024-01-07",
             "segments": ["Windows", "Mac"],
             "histograms": {
-                "BROWSER_ENGAGEMENT_TOTAL_URI_COUNT": {
+                "APPLICATION_REPUTATION_REMOTE_LOOKUP_RESPONSE_TIME": {
                     "glean": False,
                     "kind": "numerical",
                     "available_on_desktop": True,
@@ -365,7 +373,7 @@ class TestSQLQueryGeneration(unittest.TestCase):
         )
 
         # Generate legacy histogram query
-        histogram = "BROWSER_ENGAGEMENT_TOTAL_URI_COUNT"
+        histogram = "APPLICATION_REPUTATION_REMOTE_LOOKUP_RESPONSE_TIME"
         query = telemetry_client.generateHistogramQuery_OS_segments_legacy(histogram)
 
         self.assertIsNotNone(query, "Legacy histogram query generation failed")
@@ -390,10 +398,13 @@ class TestSQLQueryGeneration(unittest.TestCase):
             self.test_pageload_event_query_generation,
             self.test_rollout_query_generation,
             self.test_legacy_histogram_query_generation,
-            self.test_empty_pageload_event_metrics,
+            self.test_empty_events,
             self.test_empty_histograms,
-            self.test_only_histograms_no_pageload_events,
+            self.test_only_histograms_no_events,
             self.test_only_pageload_events_no_histograms,
+            self.test_crash_event_query_generation,
+            self.test_crash_event_query_with_non_enrolled,
+            self.test_only_crash_events_no_other_metrics,
         ]
 
         # Clear any existing queries and run all tests
@@ -492,8 +503,8 @@ class TestSQLQueryGeneration(unittest.TestCase):
 
         print("✓ Template parameter substitution validation passed")
 
-    def test_empty_pageload_event_metrics(self):
-        """Test query generation when pageload_event_metrics is empty."""
+    def test_empty_events(self):
+        """Test query generation when events list is empty."""
         config_overrides = {
             "is_experiment": True,
             "channel": "release",
@@ -509,30 +520,25 @@ class TestSQLQueryGeneration(unittest.TestCase):
                     "kind": "numerical",
                 }
             },
-            "pageload_event_metrics": {},  # Empty pageload events
+            "events": [],  # Empty events
             "include_non_enrolled_branch": False,
         }
 
         telemetry_client = self.create_experiment_config(
-            "empty-pageload-events", config_overrides
+            "empty-events", config_overrides
         )
 
         # Should still be able to generate histogram queries
         histogram = "metrics.timing_distribution.performance_pageload_fcp"
         query = telemetry_client.generateHistogramQuery_OS_segments_glean(histogram)
 
-        self.assertIsNotNone(
-            query, "Histogram query should work with empty pageload events"
-        )
-        self.generated_queries.append(("empty_pageload_events_histogram", query))
+        self.assertIsNotNone(query, "Histogram query should work with empty events")
+        self.generated_queries.append(("empty_events_histogram", query))
 
         # Validate the query
-        self.validate_sql_basic_checks(query, "empty_pageload_events_histogram")
+        self.validate_sql_basic_checks(query, "empty_events_histogram")
 
-        # Attempting to generate pageload event query should handle gracefully
-        # (In practice, this would likely not be called if no metrics are configured)
-
-        print("✓ Empty pageload event metrics test passed")
+        print("✓ Empty events test passed")
 
     def test_empty_histograms(self):
         """Test query generation when histograms is empty."""
@@ -543,10 +549,14 @@ class TestSQLQueryGeneration(unittest.TestCase):
             "endDate": "2024-01-07",
             "segments": ["Windows"],
             "histograms": {},  # Empty histograms
-            "pageload_event_metrics": {
-                "fcp_time": {"min": 0, "max": 30000},
-                "load_time": {"min": 0, "max": 60000},
-            },
+            "events": [
+                {
+                    "pageload": {
+                        "fcp_time": {"max": 30000},
+                        "load_time": {"max": 60000},
+                    }
+                }
+            ],
             "include_non_enrolled_branch": False,
         }
 
@@ -573,8 +583,8 @@ class TestSQLQueryGeneration(unittest.TestCase):
 
         print("✓ Empty histograms test passed")
 
-    def test_both_empty_metrics_and_histograms(self):
-        """Test config validation when both metrics and histograms are empty."""
+    def test_both_empty_events_and_histograms(self):
+        """Test config validation when both events and histograms are empty."""
         config_overrides = {
             "is_experiment": True,
             "channel": "release",
@@ -582,7 +592,7 @@ class TestSQLQueryGeneration(unittest.TestCase):
             "endDate": "2024-01-07",
             "segments": ["Windows"],
             "histograms": {},  # Empty histograms
-            "pageload_event_metrics": {},  # Empty pageload events
+            "events": [],  # Empty events
             "include_non_enrolled_branch": False,
         }
 
@@ -598,11 +608,12 @@ class TestSQLQueryGeneration(unittest.TestCase):
         # Verify the config was set up correctly
         self.assertEqual(len(telemetry_client.config["histograms"]), 0)
         self.assertEqual(len(telemetry_client.config["pageload_event_metrics"]), 0)
+        self.assertEqual(len(telemetry_client.config["crash_event_metrics"]), 0)
 
-        print("✓ Both empty metrics and histograms test passed")
+        print("✓ Both empty events and histograms test passed")
 
-    def test_only_histograms_no_pageload_events(self):
-        """Test config with only histograms and no pageload_event_metrics key."""
+    def test_only_histograms_no_events(self):
+        """Test config with only histograms and no events key."""
         config_overrides = {
             "is_experiment": True,
             "channel": "release",
@@ -618,7 +629,7 @@ class TestSQLQueryGeneration(unittest.TestCase):
                     "kind": "numerical",
                 }
             },
-            # No pageload_event_metrics key at all
+            # No events key at all
             "include_non_enrolled_branch": False,
         }
 
@@ -630,15 +641,13 @@ class TestSQLQueryGeneration(unittest.TestCase):
         histogram = "metrics.timing_distribution.performance_pageload_fcp"
         query = telemetry_client.generateHistogramQuery_OS_segments_glean(histogram)
 
-        self.assertIsNotNone(
-            query, "Histogram query should work without pageload_event_metrics"
-        )
+        self.assertIsNotNone(query, "Histogram query should work without events")
         self.generated_queries.append(("histograms_only", query))
 
         # Validate the query
         self.validate_sql_basic_checks(query, "histograms_only")
 
-        print("✓ Histograms only (no pageload events) test passed")
+        print("✓ Histograms only (no events) test passed")
 
     def test_only_pageload_events_no_histograms(self):
         """Test config with only pageload events and no histograms key."""
@@ -649,10 +658,14 @@ class TestSQLQueryGeneration(unittest.TestCase):
             "endDate": "2024-01-07",
             "segments": ["Windows"],
             # No histograms key at all
-            "pageload_event_metrics": {
-                "fcp_time": {"min": 0, "max": 30000},
-                "load_time": {"min": 0, "max": 60000},
-            },
+            "events": [
+                {
+                    "pageload": {
+                        "fcp_time": {"max": 30000},
+                        "load_time": {"max": 60000},
+                    }
+                }
+            ],
             "include_non_enrolled_branch": False,
         }
 
@@ -678,6 +691,120 @@ class TestSQLQueryGeneration(unittest.TestCase):
             self.validate_sql_basic_checks(query, f"pageload_only_{metric}")
 
         print("✓ Pageload events only (no histograms) test passed")
+
+    def test_crash_event_query_generation(self):
+        """Test crash event query generation."""
+        config_overrides = {
+            "is_experiment": True,
+            "channel": "beta",
+            "startDate": "2024-03-01",
+            "endDate": "2024-03-07",
+            "segments": ["Windows", "Linux"],
+            "events": ["crash"],
+            "include_non_enrolled_branch": False,
+        }
+
+        telemetry_client = self.create_experiment_config(
+            "crash-events", config_overrides
+        )
+
+        # Generate crash event queries
+        for metric in ["total_crashes"]:
+            query = telemetry_client.generateCrashEventQuery_OS_segments(metric)
+
+            self.assertIsNotNone(
+                query, f"Crash event query generation failed for {metric}"
+            )
+            self.generated_queries.append((f"crash_event_{metric}", query))
+
+            # Check metric-specific content
+            self.assertIn("crash", query, "Query should reference crash tables")
+            self.assertIn(
+                "firefox_desktop.crash",
+                query,
+                "Query should reference desktop crash table",
+            )
+            self.assertIn(
+                "fenix.crash", query, "Query should reference mobile crash table"
+            )
+
+            # Validate the query
+            self.validate_sql_basic_checks(query, f"crash_event_{metric}")
+
+    def test_crash_event_query_with_non_enrolled(self):
+        """Test crash event query generation with non-enrolled branch."""
+        config_overrides = {
+            "is_experiment": True,
+            "channel": "nightly",
+            "startDate": "2024-02-01",
+            "endDate": "2024-02-07",
+            "segments": ["Windows"],
+            "events": ["crash"],
+            "include_non_enrolled_branch": True,
+        }
+
+        telemetry_client = self.create_experiment_config(
+            "crash-non-enrolled", config_overrides
+        )
+
+        # Generate crash event query with non-enrolled branch
+        metric = "total_crashes"
+        query = telemetry_client.generateCrashEventQuery_OS_segments(metric)
+
+        self.assertIsNotNone(
+            query, "Crash event query with non-enrolled generation failed"
+        )
+        self.generated_queries.append(("crash_with_non_enrolled", query))
+
+        # Check for non-enrolled specific content
+        self.assertIn(
+            "non-enrolled", query, "Query should include non-enrolled branch logic"
+        )
+        self.assertIn(
+            "desktop_crashdata_non_enrolled",
+            query,
+            "Query should include non-enrolled desktop crash CTE",
+        )
+        self.assertIn(
+            "android_crashdata_non_enrolled",
+            query,
+            "Query should include non-enrolled mobile crash CTE",
+        )
+
+        # Validate the query
+        self.validate_sql_basic_checks(query, "crash_with_non_enrolled")
+
+    def test_only_crash_events_no_other_metrics(self):
+        """Test config with only crash events and no other metrics."""
+        config_overrides = {
+            "is_experiment": True,
+            "channel": "release",
+            "startDate": "2024-01-01",
+            "endDate": "2024-01-07",
+            "segments": ["Windows"],
+            # No histograms or pageload_event_metrics
+            "events": ["crash"],
+            "include_non_enrolled_branch": False,
+        }
+
+        telemetry_client = self.create_experiment_config("crash-only", config_overrides)
+
+        # Should be able to generate crash event queries
+        metric = "total_crashes"
+        query = telemetry_client.generateCrashEventQuery_OS_segments(metric)
+
+        self.assertIsNotNone(
+            query, "Crash event query should work without other metrics"
+        )
+        self.generated_queries.append(("crash_only", query))
+
+        # Check crash-specific content
+        self.assertIn("crash", query, "Query should reference crash tables")
+
+        # Validate the query
+        self.validate_sql_basic_checks(query, "crash_only")
+
+        print("✓ Crash events only (no other metrics) test passed")
 
 
 if __name__ == "__main__":

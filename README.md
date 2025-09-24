@@ -118,13 +118,18 @@ segments:
 histograms:
   - payload.histograms.memory_total
   - metrics.timing_distribution.performance_pageload_fcp
-pageload_event_metrics:
-  fcp_time:
-    max: 20000
-  lcp_time:
-    max: 30000
-  load_time:
-    max: 25000
+events:
+  # Include crash events to track total crash counts for each experiment branch
+  - crash
+  
+  # Include pageload events with custom metric configurations
+  - pageload:
+      fcp_time:
+        max: 20000
+      lcp_time:
+        max: 30000
+      load_time:
+        max: 25000
 ```
 
 ### Key Configuration Fields
@@ -132,7 +137,44 @@ pageload_event_metrics:
 - **slug**: Experiment identifier
 - **segments**: Target platforms/segments  
 - **histograms**: List of histogram metrics to analyze
-- **pageload_event_metrics**: Event metrics with max values (min is always 0)
+- **events**: Event metrics configuration (replaces legacy pageload_event_metrics)
+  - **crash**: Simple crash event tracking
+  - **pageload**: Pageload event metrics with max values (min is always 0)
+
+### Event Configuration Options
+
+The `events` section supports flexible configuration:
+
+**Simple crash tracking:**
+```yaml
+events:
+  - crash
+```
+
+**Pageload events with defaults:**
+```yaml
+events:
+  - pageload  # Uses defaults: fcp_time, lcp_time, load_time (all max: 30000)
+```
+
+**Custom pageload metrics:**
+```yaml
+events:
+  - pageload:
+      fcp_time:
+        max: 25000
+      custom_metric:
+        max: 15000
+```
+
+**Both crash and pageload events:**
+```yaml
+events:
+  - crash
+  - pageload:
+      fcp_time:
+        max: 20000
+```
 
 ### Example Configs
 

@@ -334,10 +334,14 @@ def create_test_config(slug, config_overrides=None):
         "segments": ["Windows", "Linux", "Mac"],
         "is_experiment": True,
         "histograms": ["metrics.timing_distribution.performance_pageload_fcp"],
-        "pageload_event_metrics": {
-            "fcp_time": {"max": 30000},
-            "load_time": {"max": 30000},
-        },
+        "events": [
+            {
+                "pageload": {
+                    "fcp_time": {"max": 30000},
+                    "load_time": {"max": 30000},
+                }
+            }
+        ],
     }
 
     if config_overrides:

@@ -20,6 +20,8 @@ from lib.parser import (
     extractValuesFromAPI,
     retrieveNimbusAPI,
     parseNimbusAPI,
+    parseEventsConfiguration,
+    annotateMetrics,
 )
 
 
@@ -76,6 +78,14 @@ class TestParser(unittest.TestCase):
         self.assertIsInstance(result, dict)
         self.assertEqual(result["slug"], "test-experiment")
         self.assertTrue(result["is_experiment"])
+
+        # After parsing, config should have new events format
+        self.assertIn("events", result)
+
+        # Call annotateMetrics to convert to internal format
+        annotateMetrics(result)
+
+        # Now should have legacy internal format
         self.assertIn("pageload_event_metrics", result)
         self.assertEqual(result["pageload_event_metrics"]["fcp_time"]["max"], 20000)
 
@@ -315,6 +325,196 @@ class TestParser(unittest.TestCase):
         mock_retrieve.assert_called_once_with(self.temp_dir, "test-experiment", False)
         mock_extract.assert_called_once_with(self.mock_nimbus_response)
         self.assertEqual(result, {"parsed": "data"})
+
+    @patch("lib.parser.loadProbeIndex")
+    def test_parseEventsConfiguration_crash_only(self, mock_load_probe_index):
+        """Test parseEventsConfiguration with crash events only"""
+        mock_load_probe_index.return_value = self.mock_probe_index
+
+        config = {"events": ["crash"]}
+
+        parseEventsConfiguration(config, self.mock_probe_index)
+
+        # Should create crash_event_metrics
+        self.assertIn("crash_event_metrics", config)
+        self.assertIn("total_crashes", config["crash_event_metrics"])
+        self.assertEqual(len(config["crash_event_metrics"]), 1)
+
+        # Should create empty pageload_event_metrics
+        self.assertIn("pageload_event_metrics", config)
+        self.assertEqual(len(config["pageload_event_metrics"]), 0)
+
+    @patch("lib.parser.loadProbeIndex")
+    def test_parseEventsConfiguration_pageload_only_default(
+        self, mock_load_probe_index
+    ):
+        """Test parseEventsConfiguration with pageload events using defaults"""
+        mock_load_probe_index.return_value = self.mock_probe_index
+
+        config = {"events": ["pageload"]}
+
+        parseEventsConfiguration(config, self.mock_probe_index)
+
+        # Should create pageload_event_metrics with defaults
+        self.assertIn("pageload_event_metrics", config)
+        expected_metrics = ["fcp_time", "lcp_time", "load_time"]
+        for metric in expected_metrics:
+            self.assertIn(metric, config["pageload_event_metrics"])
+            self.assertEqual(config["pageload_event_metrics"][metric]["max"], 30000)
+
+        # Should create empty crash_event_metrics
+        self.assertIn("crash_event_metrics", config)
+        self.assertEqual(len(config["crash_event_metrics"]), 0)
+
+    @patch("lib.parser.loadProbeIndex")
+    def test_parseEventsConfiguration_pageload_custom(self, mock_load_probe_index):
+        """Test parseEventsConfiguration with custom pageload metrics"""
+        mock_load_probe_index.return_value = self.mock_probe_index
+
+        config = {
+            "events": [
+                {"pageload": {"fcp_time": {"max": 25000}, "lcp_time": {"max": 15000}}}
+            ]
+        }
+
+        parseEventsConfiguration(config, self.mock_probe_index)
+
+        # Should create pageload_event_metrics with custom values
+        self.assertIn("pageload_event_metrics", config)
+        self.assertIn("fcp_time", config["pageload_event_metrics"])
+        self.assertEqual(config["pageload_event_metrics"]["fcp_time"]["max"], 25000)
+        self.assertIn("lcp_time", config["pageload_event_metrics"])
+        self.assertEqual(config["pageload_event_metrics"]["lcp_time"]["max"], 15000)
+
+        # Should not include default metrics that weren't specified
+        self.assertNotIn("load_time", config["pageload_event_metrics"])
+
+    @patch("lib.parser.loadProbeIndex")
+    def test_parseEventsConfiguration_pageload_empty_config(
+        self, mock_load_probe_index
+    ):
+        """Test parseEventsConfiguration with empty pageload config"""
+        mock_load_probe_index.return_value = self.mock_probe_index
+
+        config = {"events": [{"pageload": {}}]}
+
+        parseEventsConfiguration(config, self.mock_probe_index)
+
+        # Should use defaults when pageload config is empty
+        self.assertIn("pageload_event_metrics", config)
+        expected_metrics = ["fcp_time", "lcp_time", "load_time"]
+        for metric in expected_metrics:
+            self.assertIn(metric, config["pageload_event_metrics"])
+            self.assertEqual(config["pageload_event_metrics"][metric]["max"], 30000)
+
+    @patch("lib.parser.loadProbeIndex")
+    def test_parseEventsConfiguration_both_events(self, mock_load_probe_index):
+        """Test parseEventsConfiguration with both crash and pageload events"""
+        mock_load_probe_index.return_value = self.mock_probe_index
+
+        config = {"events": ["crash", {"pageload": {"fcp_time": {"max": 20000}}}]}
+
+        parseEventsConfiguration(config, self.mock_probe_index)
+
+        # Should create both event types
+        self.assertIn("crash_event_metrics", config)
+        self.assertIn("total_crashes", config["crash_event_metrics"])
+
+        self.assertIn("pageload_event_metrics", config)
+        self.assertIn("fcp_time", config["pageload_event_metrics"])
+        self.assertEqual(config["pageload_event_metrics"]["fcp_time"]["max"], 20000)
+
+    @patch("lib.parser.loadProbeIndex")
+    def test_parseEventsConfiguration_empty_events(self, mock_load_probe_index):
+        """Test parseEventsConfiguration with empty events list"""
+        mock_load_probe_index.return_value = self.mock_probe_index
+
+        config = {"events": []}
+
+        parseEventsConfiguration(config, self.mock_probe_index)
+
+        # Should create empty metrics
+        self.assertIn("pageload_event_metrics", config)
+        self.assertEqual(len(config["pageload_event_metrics"]), 0)
+        self.assertIn("crash_event_metrics", config)
+        self.assertEqual(len(config["crash_event_metrics"]), 0)
+
+    @patch("lib.parser.loadProbeIndex")
+    def test_parseEventsConfiguration_no_events_key(self, mock_load_probe_index):
+        """Test parseEventsConfiguration when events key is missing"""
+        mock_load_probe_index.return_value = self.mock_probe_index
+
+        config = {}
+
+        parseEventsConfiguration(config, self.mock_probe_index)
+
+        # Should create empty metrics
+        self.assertIn("pageload_event_metrics", config)
+        self.assertEqual(len(config["pageload_event_metrics"]), 0)
+        self.assertIn("crash_event_metrics", config)
+        self.assertEqual(len(config["crash_event_metrics"]), 0)
+
+    @patch("lib.parser.loadProbeIndex")
+    def test_annotateMetrics_new_events_format(self, mock_load_probe_index):
+        """Test annotateMetrics with new events format"""
+        mock_load_probe_index.return_value = self.mock_probe_index
+
+        config = {
+            "histograms": ["metrics.timing_distribution.performance_pageload_fcp"],
+            "events": ["crash", {"pageload": {"fcp_time": {"max": 25000}}}],
+        }
+
+        annotateMetrics(config)
+
+        # Should process histograms
+        self.assertIn("histograms", config)
+        self.assertIn(
+            "metrics.timing_distribution.performance_pageload_fcp", config["histograms"]
+        )
+
+        # Should process events and create legacy format
+        self.assertIn("pageload_event_metrics", config)
+        self.assertIn("fcp_time", config["pageload_event_metrics"])
+        self.assertEqual(config["pageload_event_metrics"]["fcp_time"]["max"], 25000)
+
+        self.assertIn("crash_event_metrics", config)
+        self.assertIn("total_crashes", config["crash_event_metrics"])
+
+    @patch("lib.parser.loadProbeIndex")
+    def test_annotateMetrics_legacy_format_compatible(self, mock_load_probe_index):
+        """Test annotateMetrics with mixed formats works in consolidated approach"""
+        mock_load_probe_index.return_value = self.mock_probe_index
+
+        config = {
+            "histograms": ["metrics.timing_distribution.performance_pageload_fcp"],
+            "events": [{"pageload": {"fcp_time": {"max": 20000}}}],
+        }
+
+        # Should work fine with consolidated approach
+        annotateMetrics(config)
+
+        # Check that metrics stay in their original sections (no transformation at parse time)
+        self.assertIn(
+            "metrics.timing_distribution.performance_pageload_fcp", config["histograms"]
+        )
+        self.assertIn("fcp_time", config["pageload_event_metrics"])
+        # Data type consolidation happens at analysis stage, not parsing stage
+
+    @patch("lib.parser.loadProbeIndex")
+    def test_annotateMetrics_crash_legacy_format_compatible(
+        self, mock_load_probe_index
+    ):
+        """Test annotateMetrics with crash formats works in consolidated approach"""
+        mock_load_probe_index.return_value = self.mock_probe_index
+
+        config = {"events": ["crash"]}
+
+        # Should work fine with consolidated approach
+        annotateMetrics(config)
+
+        # Check that crash metrics stay in their original section (no transformation at parse time)
+        self.assertIn("total_crashes", config["crash_event_metrics"])
+        # Data type consolidation happens at analysis stage, not parsing stage
 
 
 if __name__ == "__main__":

@@ -9,19 +9,20 @@ histograms:
 - payload.processes.content.histograms.perf_largest_contentful_paint_from_response_start_ms
 - payload.processes.content.histograms.time_to_response_start_ms
 - payload.processes.content.histograms.input_event_response_ms
-pageload_event_metrics:
-  fcp_time:
-    max: 10000
-  load_time:
-    max: 30000
-  lcp_time:
-    max: 30000
-  response_time:
-    max: 10000
-  js_exec_time:
-    max: 10000
 segments:
 - All
 - Windows
 - Linux
 - Mac
+events:
+- pageload:
+    fcp_time:
+      max: 10000
+    load_time:
+      max: 30000
+    lcp_time:
+      max: 30000
+    response_time:
+      max: 10000
+    js_exec_time:
+      max: 10000

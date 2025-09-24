@@ -1,0 +1,147 @@
+{% autoescape off %}
+<div class="chart"><canvas height="250px" id="{{segment}}-{{metric}}-crash"></canvas></div>
+<script>
+  ctx = document.getElementById('{{segment}}-{{metric}}-crash');
+
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: [{% for dataset in datasets %}"{{dataset.branch}}"{% if not forloop.last %},{% endif %}{% endfor %}],
+      datasets: [
+        {
+          data: [
+{% for dataset in datasets %}
+            {
+              x: "{{dataset.branch}}",
+              y: {{dataset.count}},
+              {% if dataset.relative_change_str %}
+              change: "{{dataset.relative_change_str}}"
+              {% endif %}
+            },
+{% endfor %}
+          ],
+          backgroundColor: [
+{% for dataset in datasets %}
+            {% if dataset.control %}
+            'rgba(54, 162, 235, 0.6)',  // Blue for control
+            {% else %}
+              {% if dataset.relative_change >= 50 %}
+            'rgba(255, 99, 132, 0.6)',  // Red for crash increase (bad)
+              {% elif dataset.relative_change <= -50 %}
+            'rgba(75, 192, 192, 0.6)',  // Green for crash decrease (good)
+              {% else %}
+            'rgba(255, 206, 86, 0.6)',  // Yellow for minor changes
+              {% endif %}
+            {% endif %}
+{% endfor %}
+          ],
+          borderColor: [
+{% for dataset in datasets %}
+            {% if dataset.control %}
+            'rgba(54, 162, 235, 1)',
+            {% else %}
+              {% if dataset.relative_change >= 50 %}
+            'rgba(255, 99, 132, 1)',
+              {% elif dataset.relative_change <= -50 %}
+            'rgba(75, 192, 192, 1)',
+              {% else %}
+            'rgba(255, 206, 86, 1)',
+              {% endif %}
+            {% endif %}
+{% endfor %}
+          ],
+          borderWidth: 1
+        },
+      ]
+    },
+    options: {
+      animation: false,
+      maintainAspectRatio: false,
+      responsive: true,
+      plugins: {
+          crosshair: { zoom: {enabled: false } },
+          datalabels: {
+            anchor: 'end',
+            align: 'top',
+            formatter: (n) => {
+                return n.hasOwnProperty('change') 
+                  ?  n.y + " (" + n.change + ")" 
+                  :  n.y.toString();
+            },
+            font: {
+              weight: 'bold',
+                size: 14
+            }
+          },
+          legend: {
+              display: false,
+              position: 'top',
+            },
+          title: {
+              display: true,
+              text: ["{{metric}} (crash events)", "segment: {{segment}}"]
+            }
+      },
+      scales: {
+        y: {
+          grace: '25%',
+          beginAtZero: true,
+          title: {
+            text: "Crash Count",
+            display: true
+          }
+        },
+        x: {
+          type: "category",
+        }
+      },
+    }
+  });
+</script>
+
+<table border="1" cellspacing="0" cellpadding="0" class="stat-table">
+  <thead>
+    <tr> 
+      <th>
+        Branch
+      </th>
+      <th>
+        Crash Count
+      </th>
+      <th>
+        Relative Change
+      </th>
+      <th>
+        Absolute Difference
+      </th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for dataset in datasets %}
+    <tr>
+      <td>
+        {% if dataset.control == True %}
+        {{dataset.branch}} (control)
+        {% else %}
+        {{dataset.branch}}
+        {% endif %}
+      </td>
+      <td>
+        {{dataset.count}}
+      </td>
+      <td>
+        {% if dataset.control == False %}
+        {{dataset.relative_change_str}}
+        {% endif %}
+      </td>
+      <td>
+        {% if dataset.control == False %}
+        {{dataset.absolute_diff_str}}
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% endautoescape %}

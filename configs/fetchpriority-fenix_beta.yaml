@@ -1,11 +1,12 @@
 slug: fetch-priority-fenix-beta
 histograms: []
-pageload_event_metrics:
-  fcp_time:
-    max: 30000
-  lcp_time:
-    max: 30000
-  load_time:
-    max: 30000
 segments:
 - Android
+events:
+- pageload:
+    fcp_time:
+      max: 30000
+    lcp_time:
+      max: 30000
+    load_time:
+      max: 30000

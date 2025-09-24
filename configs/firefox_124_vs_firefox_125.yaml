@@ -21,19 +21,20 @@ branches:
   channel: nightly
   version: 125
   conditions: []
-pageload_event_metrics:
-  fcp_time:
-    max: 3000
-  load_time:
-    max: 10000
-  lcp_time:
-    max: 10000
-  response_time:
-    max: 3000
-  js_exec_time:
-    max: 3000
 segments:
 - All
 - Windows
 - Linux
 - Mac
+events:
+- pageload:
+    fcp_time:
+      max: 3000
+    load_time:
+      max: 10000
+    lcp_time:
+      max: 10000
+    response_time:
+      max: 3000
+    js_exec_time:
+      max: 3000

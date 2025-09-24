@@ -12,14 +12,15 @@ histograms:
 - metrics.timing_distribution.performance_pageload_load_time
 - metrics.timing_distribution.performance_pageload_fcp
 - metrics.timing_distribution.perf_largest_contentful_paint
-pageload_event_metrics:
-  fcp_time:
-    max: 30000
-  load_time:
-    max: 30000
-  lcp_time:
-    max: 30000
-  response_time:
-    max: 30000
 segments:
 - Mac
+events:
+- pageload:
+    fcp_time:
+      max: 30000
+    load_time:
+      max: 30000
+    lcp_time:
+      max: 30000
+    response_time:
+      max: 30000

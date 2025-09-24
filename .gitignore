@@ -1,6 +1,8 @@
 # Generated data and reports
 data/
 reports/
+node_modules/
+claude/
 
 # Temporary and swap files
 *~
@@ -23,8 +25,13 @@ venv/
 
 # Development tools
 .claude/
+package-lock.json
+package.json
 
 # IDE files
 .vscode/
 .idea/
 *.sublime-*
+
+# Temporary yaml configs
+*.yaml

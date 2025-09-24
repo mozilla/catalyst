@@ -36,14 +36,21 @@ def loadProbeIndex() -> Optional[Dict[str, Any]]:
 
 
 def annotateMetrics(config: Dict[str, Any]) -> None:
-    """Annotate config with probe index metadata for histograms and pageload events.
+    """Annotate config with probe index metadata for histograms and events.
 
     Args:
       config: Configuration dictionary to annotate
     """
     probeIndex = loadProbeIndex()
     annotateHistograms(config, probeIndex)
-    annotatePageloadEventMetrics(config, probeIndex)
+
+    # Handle new events structure
+    if "events" in config:
+        parseEventsConfiguration(config, probeIndex)
+    else:
+        # No events specified - create empty structures
+        config["pageload_event_metrics"] = {}
+        config["crash_event_metrics"] = {}
 
 
 def annotatePageloadEventMetrics(
@@ -67,6 +74,9 @@ def annotatePageloadEventMetrics(
                 "description"
             ]
             config["pageload_event_metrics"][metric]["min"] = 0
+            config["pageload_event_metrics"][metric][
+                "kind"
+            ] = "numerical"  # Pageload events are numerical histograms
 
             # Expect new max parameter format: {max: 30000}
             metric_config = event_metrics[metric]
@@ -85,6 +95,83 @@ def annotatePageloadEventMetrics(
             sys.exit(1)
 
 
+def annotateCrashEventMetrics(
+    config: Dict[str, Any], probeIndex: Dict[str, Any]
+) -> None:
+    """Annotate crash event metrics with basic configuration.
+
+    Args:
+      config: Configuration dictionary containing crash_event_metrics
+      probeIndex: Probe index dictionary (currently unused for crash events)
+    """
+    if "crash_event_metrics" not in config:
+        config["crash_event_metrics"] = {}
+        return
+
+    crash_metrics = config["crash_event_metrics"].copy()
+    config["crash_event_metrics"] = {}
+
+    for metric in crash_metrics:
+        config["crash_event_metrics"][metric] = {
+            "desc": "Total count of crashes for this experiment branch",
+            "kind": "scalar",  # Crash events are scalar counts
+        }
+
+
+def parseEventsConfiguration(
+    config: Dict[str, Any], probeIndex: Dict[str, Any]
+) -> None:
+    """Parse the new events configuration structure and populate legacy format.
+
+    Args:
+        config: Configuration dictionary containing events
+        probeIndex: Probe index dictionary containing schema information
+    """
+    # Initialize empty legacy structures
+    config["pageload_event_metrics"] = {}
+    config["crash_event_metrics"] = {}
+
+    if "events" not in config or not config["events"]:
+        return
+
+    # Default pageload metrics if pageload is specified without sub-metrics
+    default_pageload_metrics = {
+        "fcp_time": {"max": 30000},
+        "lcp_time": {"max": 30000},
+        "load_time": {"max": 30000},
+        "response_time": {"max": 30000},
+    }
+
+    for event in config["events"]:
+        if event == "crash":
+            # Simple crash event configuration
+            config["crash_event_metrics"]["total_crashes"] = {}
+        elif isinstance(event, str) and event == "pageload":
+            # Pageload with default metrics
+            config["pageload_event_metrics"] = default_pageload_metrics.copy()
+        elif isinstance(event, dict) and "pageload" in event:
+            # Pageload with custom metrics
+            pageload_config = event["pageload"]
+            if pageload_config:
+                config["pageload_event_metrics"] = pageload_config.copy()
+            else:
+                config["pageload_event_metrics"] = default_pageload_metrics.copy()
+        elif isinstance(event, dict):
+            # Handle other event types in the future
+            for event_type, event_config in event.items():
+                if event_type == "pageload":
+                    if event_config:
+                        config["pageload_event_metrics"] = event_config.copy()
+                    else:
+                        config["pageload_event_metrics"] = (
+                            default_pageload_metrics.copy()
+                        )
+
+    # Now annotate the parsed events using existing functions
+    annotatePageloadEventMetrics(config, probeIndex)
+    annotateCrashEventMetrics(config, probeIndex)
+
+
 def annotateHistograms(config: Dict[str, Any], probeIndex: Dict[str, Any]) -> None:
     """Annotate histograms with schema information from probe index.
 
@@ -92,14 +179,50 @@ def annotateHistograms(config: Dict[str, Any], probeIndex: Dict[str, Any]) -> No
       config: Configuration dictionary containing histograms
       probeIndex: Probe index dictionary containing schema information
     """
+    if "histograms" not in config:
+        config["histograms"] = {}
+        return
+
     histograms = config["histograms"].copy()
     config["histograms"] = {}
     for i, hist in enumerate(histograms):
         config["histograms"][hist] = {}
         hist_name = hist.split(".")[-1]
 
+        # Prioritize Glean probes for metrics that start with "metrics."
+        if hist.startswith("metrics.") and hist_name in probeIndex["glean"]:
+            schema = probeIndex["glean"][hist_name]
+            config["histograms"][hist]["glean"] = True
+            config["histograms"][hist]["desc"] = schema["description"]
+
+            # Mark if the probe is available on desktop or mobile.
+            config["histograms"][hist]["available_on_desktop"] = False
+            config["histograms"][hist]["available_on_android"] = False
+
+            if "gecko" in schema["repos"]:
+                config["histograms"][hist]["available_on_desktop"] = True
+                config["histograms"][hist]["available_on_android"] = True
+            elif "fenix" in schema["repos"]:
+                config["histograms"][hist]["available_on_android"] = True
+            elif "desktop" in schema["repos"]:
+                config["histograms"][hist]["available_on_desktop"] = True
+
+            # Support timing and memory distribution types.
+            if schema["type"] in ["timing_distribution", "memory_distribution"]:
+                config["histograms"][hist]["kind"] = "numerical"
+            else:
+                type = schema["type"]
+                print(f"ERROR: Type {type} for {hist_name} not currently supported.")
+                sys.exit(1)
+
+            # Use the high and low values from the legacy mirror as bounds.
+            if "telemetry_mirror" in probeIndex["glean"][hist_name]:
+                legacy_mirror = probeIndex["glean"][hist_name]["telemetry_mirror"]
+                high = probeIndex["legacy"][legacy_mirror]["details"]["high"]
+                config["histograms"][hist]["max"] = high
+
         # Annotate legacy probe.
-        if hist_name.upper() in probeIndex["legacy"]:
+        elif hist_name.upper() in probeIndex["legacy"]:
             schema = probeIndex["legacy"][hist_name.upper()]
             config["histograms"][hist]["glean"] = False
             config["histograms"][hist]["desc"] = schema["description"]
@@ -137,8 +260,8 @@ def annotateHistograms(config: Dict[str, Any], probeIndex: Dict[str, Any]) -> No
             elif "desktop" in schema["repos"]:
                 config["histograms"][hist]["available_on_desktop"] = True
 
-            # Only support timing distribution types for now.
-            if schema["type"] == "timing_distribution":
+            # Support timing and memory distribution types.
+            if schema["type"] in ["timing_distribution", "memory_distribution"]:
                 config["histograms"][hist]["kind"] = "numerical"
             else:
                 type = schema["type"]

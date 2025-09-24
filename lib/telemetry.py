@@ -13,18 +13,26 @@ from google.cloud import bigquery
 from django.template.loader import get_template
 
 
-def invalidDataSet(df: pd.DataFrame, histogram: str, branches: List[Dict[str, Any]], segments: List[str]) -> bool:
+def invalidDataSet(
+    df: pd.DataFrame,
+    histogram: str,
+    branches: List[Dict[str, Any]],
+    segments: List[str],
+    min_sample_size: int = 1000,
+) -> bool:
     """
-    Remove any histograms that have empty datasets in either a branch or branch segment.
+    Remove any histograms that have empty datasets or insufficient sample sizes
+    in either a branch or branch segment.
 
     Args:
         df: DataFrame containing telemetry data
         histogram: Name of the histogram being validated
         branches: List of branch configurations
         segments: List of segment names
+        min_sample_size: Minimum required sample size per branch/segment
 
     Returns:
-        True if dataset is invalid (empty or missing data), False otherwise
+        True if dataset is invalid (empty or insufficient data), False otherwise
     """
     if df.empty:
         print(f"Empty dataset found, removing: {histogram}.")
@@ -47,6 +55,20 @@ def invalidDataSet(df: pd.DataFrame, histogram: str, branches: List[Dict[str, An
                     f"Empty dataset found for segment={segment}, removing: {histogram}."
                 )
                 return True
+
+            # Check minimum sample size for histograms and pageload events
+            if "counts" in branch_segment_df.columns:
+                total_samples = branch_segment_df["counts"].sum()
+                if total_samples < min_sample_size:
+                    print(
+                        f"Insufficient sample size for {branch_name}/{segment}: {histogram} "
+                        f"(found {total_samples}, need {min_sample_size}), removing."
+                    )
+                    return True
+            # Check minimum sample size for crash events
+            elif "crash_count" in branch_segment_df.columns:
+                # For crash events, we don't enforce minimum sample size since 0 crashes is meaningful
+                pass
 
     return False
 
@@ -88,6 +110,7 @@ class TelemetryClient:
     This class handles SQL query generation, BigQuery execution,
     and local caching of results.
     """
+
     def __init__(self, dataDir: str, config: Dict[str, Any], skipCache: bool = False):
         self.client = bigquery.Client()
         self.config = config
@@ -104,7 +127,8 @@ class TelemetryClient:
         branch: str,
         segment: str,
         event_metrics: Dict[str, pd.DataFrame],
-        histograms: Dict[str, pd.DataFrame]
+        histograms: Dict[str, pd.DataFrame],
+        crash_metrics: Dict[str, pd.DataFrame],
     ) -> None:
         for histogram in self.config["histograms"]:
             df = histograms[histogram]
@@ -205,6 +229,24 @@ class TelemetryClient:
                 f"    segment={segment} len(pageload event: {metric}) = ", len(buckets)
             )
 
+        for metric in self.config["crash_event_metrics"]:
+            df = crash_metrics[metric]
+            if segment == "All":
+                subset = df[df["branch"] == branch][["crash_count"]].sum()
+                crash_count = int(subset["crash_count"])
+            else:
+                subset = df[(df["segment"] == segment) & (df["branch"] == branch)]
+                crash_count = (
+                    int(subset["crash_count"].sum()) if not subset.empty else 0
+                )
+
+            results[branch][segment]["crash_event_metrics"][metric] = {
+                "crash_count": crash_count
+            }
+            print(
+                f"    segment={segment} crash metric: {metric} = {crash_count} crashes"
+            )
+
     def getResults(self) -> Dict[str, Any]:
         """
         Get telemetry results for the configured experiment.
@@ -223,6 +265,26 @@ class TelemetryClient:
         for metric in self.config["pageload_event_metrics"]:
             event_metrics[metric] = self.getPageloadEventDataNonExperiment(metric)
             print(event_metrics[metric])
+
+        # Get data for each crash event metric.
+        crash_metrics = {}
+        crash_remove = []
+        for metric in self.config["crash_event_metrics"]:
+            df = self.getCrashEventDataNonExperiment(metric)
+            print(df)
+
+            # Remove crash events that have no data.
+            if invalidDataSet(
+                df, f"crash event: {metric}", self.config["branches"], self.config["segments"]
+            ):
+                crash_remove.append(metric)
+                continue
+            crash_metrics[metric] = df
+
+        # Remove invalid crash event metrics from config
+        for metric in crash_remove:
+            if metric in self.config["crash_event_metrics"]:
+                del self.config["crash_event_metrics"][metric]
 
         # Get data for each histogram in this segment.
         histograms = {}
@@ -256,11 +318,17 @@ class TelemetryClient:
                 results[branch_name][segment] = {
                     "histograms": {},
                     "pageload_event_metrics": {},
+                    "crash_event_metrics": {},
                 }
 
                 # Special case when segments is OS only.
                 self.collectResultsFromQuery_OS_segments(
-                    results, branch_name, segment, event_metrics, histograms
+                    results,
+                    branch_name,
+                    segment,
+                    event_metrics,
+                    histograms,
+                    crash_metrics,
                 )
 
         results["queries"] = self.queries
@@ -272,6 +340,26 @@ class TelemetryClient:
         for metric in self.config["pageload_event_metrics"]:
             event_metrics[metric] = self.getPageloadEventData(metric)
             print(event_metrics[metric])
+
+        # Get data for each crash event metric.
+        crash_metrics = {}
+        crash_remove = []
+        for metric in self.config["crash_event_metrics"]:
+            df = self.getCrashEventData(metric)
+            print(df)
+
+            # Remove crash events that have no data.
+            if invalidDataSet(
+                df, f"crash event: {metric}", self.config["branches"], self.config["segments"]
+            ):
+                crash_remove.append(metric)
+                continue
+            crash_metrics[metric] = df
+
+        # Remove invalid crash event metrics from config
+        for metric in crash_remove:
+            if metric in self.config["crash_event_metrics"]:
+                del self.config["crash_event_metrics"][metric]
 
         # Get data for each histogram in this segment.
         histograms = {}
@@ -306,11 +394,17 @@ class TelemetryClient:
                 results[branch_name][segment] = {
                     "histograms": {},
                     "pageload_event_metrics": {},
+                    "crash_event_metrics": {},
                 }
 
                 # Special case when segments is OS only.
                 self.collectResultsFromQuery_OS_segments(
-                    results, branch_name, segment, event_metrics, histograms
+                    results,
+                    branch_name,
+                    segment,
+                    event_metrics,
+                    histograms,
+                    crash_metrics,
                 )
 
         results["queries"] = self.queries
@@ -569,6 +663,54 @@ class TelemetryClient:
         self.queries.append({"name": f"Histogram: {histogram}", "query": query})
         return query
 
+    def generateCrashEventQuery_OS_segments_non_experiment(self, metric):
+        t = get_template("other/glean/crash_events_os_segments.sql")
+
+        branches = self.config["branches"]
+        for i in range(len(branches)):
+            branches[i]["last"] = False
+            if "version" in self.config["branches"][i]:
+                version = self.config["branches"][i]["version"]
+                branches[i][
+                    "ver_condition"
+                ] = f"AND SPLIT(client_info.app_display_version, '.')[offset(0)] = \"{version}\""
+            if "architecture" in self.config["branches"][i]:
+                arch = self.config["branches"][i]["architecture"]
+                branches[i][
+                    "arch_condition"
+                ] = f'AND client_info.architecture = "{arch}"'
+            if "glean_conditions" in self.config["branches"][i]:
+                branches[i]["glean_conditions"] = self.config["branches"][i][
+                    "glean_conditions"
+                ]
+        branches[-1]["last"] = True
+
+        context = {
+            "metric": metric,
+            "branches": branches,
+        }
+
+        query = t.render(context)
+        query = clean_sql_query(query)
+        self.queries.append({"name": f"Crash event: {metric}", "query": query})
+        return query
+
+    def generateCrashEventQuery_OS_segments(self, metric):
+        t = get_template("experiment/glean/crash_events_os_segments.sql")
+
+        context = {
+            "include_non_enrolled_branch": self.config["include_non_enrolled_branch"],
+            "slug": self.config["slug"],
+            "channel": self.config["channel"],
+            "startDate": self.config["startDate"],
+            "endDate": self.config["endDate"],
+            "metric": metric,
+        }
+        query = t.render(context)
+        query = clean_sql_query(query)
+        self.queries.append({"name": f"Crash event: {metric}", "query": query})
+        return query
+
     def checkForExistingData(self, filename: str) -> Optional[pd.DataFrame]:
         """
         Check for existing cached data.
@@ -589,7 +731,9 @@ class TelemetryClient:
         except Exception:
             return None
 
-    def getHistogramDataNonExperiment(self, config: Dict[str, Any], histogram: str) -> pd.DataFrame:
+    def getHistogramDataNonExperiment(
+        self, config: Dict[str, Any], histogram: str
+    ) -> pd.DataFrame:
         slug = config["slug"]
         hist_name = histogram.split(".")[-1]
         filename = os.path.join(self.dataDir, f"{slug}-{hist_name}.pkl")
@@ -684,5 +828,47 @@ class TelemetryClient:
         job = self.client.query(query)
         df = job.to_dataframe()
         print(f"Writing '{slug}' pageload event results to disk.")
+        df.to_pickle(filename)
+        return df
+
+    def getCrashEventDataNonExperiment(self, metric: str) -> pd.DataFrame:
+        slug = self.config["slug"]
+        filename = os.path.join(self.dataDir, f"{slug}-crash-events-{metric}.pkl")
+
+        df = self.checkForExistingData(filename)
+        if df is not None:
+            return df
+
+        if segments_are_all_OS(self.config["segments"]):
+            query = self.generateCrashEventQuery_OS_segments_non_experiment(metric)
+        else:
+            print("Generic non-experiment query currently not supported.")
+            sys.exit(1)
+
+        print("Running query:\n" + query)
+        job = self.client.query(query)
+        df = job.to_dataframe()
+        print(f"Writing '{slug}' crash event results to disk.")
+        df.to_pickle(filename)
+        return df
+
+    def getCrashEventData(self, metric: str) -> pd.DataFrame:
+        slug = self.config["slug"]
+        filename = os.path.join(self.dataDir, f"{slug}-crash-events-{metric}.pkl")
+
+        df = self.checkForExistingData(filename)
+        if df is not None:
+            return df
+
+        if segments_are_all_OS(self.config["segments"]):
+            query = self.generateCrashEventQuery_OS_segments(metric)
+        else:
+            print("No current support for generic crash event queries.")
+            sys.exit(1)
+
+        print("Running query:\n" + query)
+        job = self.client.query(query)
+        df = job.to_dataframe()
+        print(f"Writing '{slug}' crash event results to disk.")
         df.to_pickle(filename)
         return df

@@ -6,10 +6,11 @@ segments:
 histograms:
   - payload.histograms.memory_total
   - metrics.timing_distribution.performance_pageload_fcp
-pageload_event_metrics:
-  fcp_time:
-    max: 20000
-  lcp_time:
-    max: 30000
-  load_time:
-    max: 25000
+events:
+  - pageload:
+      fcp_time:
+        max: 20000
+      lcp_time:
+        max: 30000
+      load_time:
+        max: 25000

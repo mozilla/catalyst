@@ -20,17 +20,18 @@ histograms:
 - payload.processes.content.histograms.gc_parallel_mark_utilization
 - payload.processes.content.histograms.gc_parallel_mark_interruptions
 - payload.processes.content.histograms.gc_task_start_delay_us
-pageload_event_metrics:
-  fcp_time:
-    max: 10000
-  load_time:
-    max: 30000
-  response_time:
-    max: 10000
-  js_exec_time:
-    max: 10000
 segments:
   All: []
   Windows: []
   Linux: []
   Mac: []
+events:
+- pageload:
+    fcp_time:
+      max: 10000
+    load_time:
+      max: 30000
+    response_time:
+      max: 10000
+    js_exec_time:
+      max: 10000

@@ -26,17 +26,18 @@ branches:
   - AND application.build_id >= "20240320095303"
   glean_conditions:
   - AND client_info.app_build >= "20240320095303"
-pageload_event_metrics:
-  fcp_time:
-    max: 50000
-  load_time:
-    max: 50000
-  lcp_time:
-    max: 50000
-  response_time:
-    max: 50000
 segments:
 - All
 - Windows
 - Linux
 - Mac
+events:
+- pageload:
+    fcp_time:
+      max: 50000
+    load_time:
+      max: 50000
+    lcp_time:
+      max: 50000
+    response_time:
+      max: 50000
