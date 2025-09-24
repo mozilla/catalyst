@@ -286,6 +286,13 @@ def generate_report(args):
             if config_end_date is not None:
                 config["endDate"] = config_end_date
 
+            # Prompt user for max duration if needed
+            parser.promptForMaxDuration(config, args)
+
+            # Apply max duration limit if specified
+            if hasattr(args, 'max_duration_days'):
+                parser.applyMaxDuration(config, args.max_duration_days)
+
             # If the experiment is a rollout, then use the non-enrolled branch
             # as the control.
             if config["isRollout"]:
@@ -305,6 +312,10 @@ def generate_report(args):
                         config["branches"].append({"name": "default"})
             else:
                 config["include_non_enrolled_branch"] = False
+        else:
+            # For non-experiments, apply max duration if specified
+            if hasattr(args, 'max_duration_days'):
+                parser.applyMaxDuration(config, args.max_duration_days)
 
         print("Using Config:")
         configStr = json.dumps(config, indent=2)

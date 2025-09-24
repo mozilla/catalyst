@@ -806,6 +806,134 @@ class TestSQLQueryGeneration(unittest.TestCase):
 
         print("✓ Crash events only (no other metrics) test passed")
 
+    def test_max_duration_days_restriction(self):
+        """Test that max_duration_days properly restricts SQL query date ranges."""
+        from lib.parser import applyMaxDuration
+
+        # Original config with 30-day experiment
+        config_overrides = {
+            "is_experiment": True,
+            "channel": "release",
+            "startDate": "2024-07-01",
+            "endDate": "2024-07-30",
+            "segments": ["Windows"],
+            "histograms": {
+                "metrics.timing_distribution.performance_pageload_fcp": {
+                    "glean": True,
+                    "desc": "Test histogram for FCP timing",
+                    "available_on_desktop": True,
+                    "available_on_android": True,
+                    "kind": "numerical",
+                }
+            },
+            "pageload_event_metrics": {
+                "fcp_time": {
+                    "desc": "Time to first contentful paint",
+                    "min": 0,
+                    "max": 30000,
+                    "kind": "numerical",
+                }
+            },
+            "crash_event_metrics": {
+                "total_crashes": {
+                    "desc": "Total count of crashes for this experiment branch",
+                    "kind": "scalar",
+                }
+            },
+            "include_non_enrolled_branch": False,
+        }
+
+        # Apply max duration of 7 days
+        applyMaxDuration(config_overrides, 7)
+
+        # The start date should be adjusted to 2024-07-23 (7 days before end date)
+        self.assertEqual(
+            config_overrides["startDate"],
+            "2024-07-23",
+            "Start date should be adjusted to last 7 days",
+        )
+        self.assertEqual(
+            config_overrides["endDate"],
+            "2024-07-30",
+            "End date should remain unchanged",
+        )
+
+        # Create telemetry client with adjusted config
+        telemetry_client = self.create_experiment_config(
+            "max-duration-test", config_overrides
+        )
+
+        # Test histogram query
+        histogram = "metrics.timing_distribution.performance_pageload_fcp"
+        histogram_query = telemetry_client.generateHistogramQuery_OS_segments_glean(histogram)
+
+        self.assertIsNotNone(histogram_query, "Histogram query generation failed")
+
+        # Verify the histogram query contains the adjusted dates
+        self.assertIn(
+            "2024-07-23", histogram_query, "Histogram query should contain adjusted start date (2024-07-23)"
+        )
+        self.assertIn(
+            "2024-07-30", histogram_query, "Histogram query should contain original end date (2024-07-30)"
+        )
+        self.assertNotIn(
+            "2024-07-01",
+            histogram_query,
+            "Histogram query should NOT contain original start date (2024-07-01)",
+        )
+
+        # Test pageload event query
+        pageload_query = telemetry_client.generatePageloadEventQuery_OS_segments("fcp_time")
+
+        self.assertIsNotNone(pageload_query, "Pageload event query generation failed")
+
+        # Verify the pageload event query contains the adjusted dates
+        self.assertIn(
+            "2024-07-23", pageload_query, "Pageload query should contain adjusted start date (2024-07-23)"
+        )
+        self.assertIn(
+            "2024-07-30", pageload_query, "Pageload query should contain original end date (2024-07-30)"
+        )
+        self.assertNotIn(
+            "2024-07-01",
+            pageload_query,
+            "Pageload query should NOT contain original start date (2024-07-01)",
+        )
+
+        # Test crash event query
+        crash_query = telemetry_client.generateCrashEventQuery_OS_segments("total_crashes")
+
+        self.assertIsNotNone(crash_query, "Crash event query generation failed")
+
+        # Verify the crash event query contains the adjusted dates
+        self.assertIn(
+            "2024-07-23", crash_query, "Crash query should contain adjusted start date (2024-07-23)"
+        )
+        self.assertIn(
+            "2024-07-30", crash_query, "Crash query should contain original end date (2024-07-30)"
+        )
+        self.assertNotIn(
+            "2024-07-01",
+            crash_query,
+            "Crash query should NOT contain original start date (2024-07-01)",
+        )
+
+        # Check that no template syntax remains in any query
+        for query_name, query in [
+            ("histogram", histogram_query),
+            ("pageload", pageload_query),
+            ("crash", crash_query),
+        ]:
+            self.assertNotIn("{{", query, f"{query_name} query: Template syntax not fully substituted")
+            self.assertNotIn("}}", query, f"{query_name} query: Template syntax not fully substituted")
+
+        # Validate all queries
+        self.validate_sql_basic_checks(histogram_query, "max_duration_histogram_test")
+        self.validate_sql_basic_checks(pageload_query, "max_duration_pageload_test")
+        self.validate_sql_basic_checks(crash_query, "max_duration_crash_test")
+
+        print("✓ Max duration days restriction test passed")
+
 
 if __name__ == "__main__":
     # Print information about available validation packages

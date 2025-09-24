@@ -399,6 +399,78 @@ def parseNimbusAPI(dataDir: str, slug: str, skipCache: bool) -> Dict[str, Any]:
     return extractValuesFromAPI(apiValues)
 
 
+def promptForMaxDuration(config: Dict[str, Any], args: Any) -> None:
+    """Prompt user to limit data collection for long-running release experiments.
+
+    Args:
+      config: Configuration dictionary with startDate, endDate, and channel
+      args: Arguments object that may contain max_duration_days
+    """
+    # Skip if max_duration_days is already set
+    if hasattr(args, 'max_duration_days') and args.max_duration_days is not None:
+        return
+
+    # Skip if not a release channel
+    channel = config.get("channel", "").lower()
+    if channel != "release":
+        return
+
+    # Skip if we don't have dates
+    if "startDate" not in config or "endDate" not in config:
+        return
+
+    # Calculate duration
+    try:
+        start_date = datetime.datetime.strptime(config["startDate"], "%Y-%m-%d")
+        end_date = datetime.datetime.strptime(config["endDate"], "%Y-%m-%d")
+        duration_days = (end_date - start_date).days
+    except (ValueError, TypeError):
+        return
+
+    # Prompt if duration is greater than 7 days
+    if duration_days > 7:
+        print(f"\n⚠️  WARNING: This is a release channel experiment with a {duration_days}-day duration.")
+        print(f"   Date range: {config['startDate']} to {config['endDate']}")
+        print("   Collecting data for the full duration may take a long time and incur high BigQuery costs.")
+        print("   (You can also set a custom duration using --max-duration-days=N)")
+        print()
+
+        response = input("   Would you like to restrict data collection to the last 7 days? [Y/n]: ").strip().lower()
+
+        if response in ["", "y", "yes"]:
+            args.max_duration_days = 7
+            print("   ✓ Data collection will be limited to the last 7 days.")
+        else:
+            args.max_duration_days = None
+            print(f"   ✓ Data collection will proceed for the full {duration_days}-day duration.")
+        print()
+
+
+def applyMaxDuration(config: Dict[str, Any], max_duration_days: Optional[int]) -> None:
+    """Adjust the start date if max_duration_days is specified.
+
+    Args:
+      config: Configuration dictionary with startDate and endDate
+      max_duration_days: Maximum number of days to collect data (from end date backwards)
+    """
+    if max_duration_days is None:
+        return
+
+    if "endDate" not in config or "startDate" not in config:
+        return
+
+    end_date = datetime.datetime.strptime(config["endDate"], "%Y-%m-%d")
+    original_start_date = datetime.datetime.strptime(config["startDate"], "%Y-%m-%d")
+
+    # Calculate the new start date (max_duration_days before end date)
+    adjusted_start_date = end_date - datetime.timedelta(days=max_duration_days)
+
+    # Only adjust if the new start date is later than the original
+    if adjusted_start_date > original_start_date:
+        config["startDate"] = adjusted_start_date.strftime("%Y-%m-%d")
+        print(f"Limiting data collection to last {max_duration_days} days: {config['startDate']} to {config['endDate']}")
+
+
 def parseConfigFile(configFile: str) -> Dict[str, Any]:
     """Parse YAML config file and add experiment metadata.
 

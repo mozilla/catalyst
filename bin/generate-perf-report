@@ -17,6 +17,8 @@ def parseArguments():
                       default=False, help="Ignore any cached files on disk, and regenerate them.")
   parser.add_argument('--html-report', action=argparse.BooleanOptionalAction,
                       default=True, help="Generate html report.")
+  parser.add_argument('--max-duration-days', type=int, default=None,
+                      help="Limit data collection to the last N days of the experiment (optional).")
   args = parser.parse_args()
   return args
 

@@ -171,6 +171,13 @@ def create_config_for_experiment(exp):
   args.reportDir = 'reports'
   args.skip_cache = False
   args.html_report = True
+
+  # Set default of 7 days for release experiments
+  if exp.get('channel') == 'release':
+    args.max_duration_days = 7
+  else:
+    args.max_duration_days = None
+
   return args
 
 def load_failures(failures_file):
