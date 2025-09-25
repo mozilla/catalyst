@@ -13,10 +13,22 @@ def flatten_histogram(bins, counts):
 
 # effect size calculation for t-test
 def calc_cohen_d(x1, x2, s1, s2, n1, n2):
-    effect_size = (x1 - x2) / np.sqrt(
-        ((n1 - 1) * s1**2 + (n2 - 1) * s2**2) / (n1 + n2 - 2)
-    )
-    return effect_size
+    # Calculate pooled standard deviation
+    pooled_variance = ((n1 - 1) * s1**2 + (n2 - 1) * s2**2) / (n1 + n2 - 2)
+    pooled_std = np.sqrt(pooled_variance)
+
+    # Handle edge cases where pooled standard deviation is very small
+    if pooled_std < 1e-10:  # Essentially zero variance
+        # If means are identical, effect size is 0; otherwise return a large but finite value
+        if abs(x1 - x2) < 1e-10:
+            return 0.0
+        else:
+            return np.sign(x1 - x2) * 10.0  # Large effect size, capped at 10
+
+    effect_size = (x1 - x2) / pooled_std
+
+    # Cap effect size to reasonable bounds to avoid overflow issues
+    return np.clip(effect_size, -10.0, 10.0)
 
 
 # effect size calculation for mwu

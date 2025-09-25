@@ -189,6 +189,7 @@ class TelemetryClient:
 
             def histogram_method(histogram_name):
                 return self.getHistogramData(self.config, histogram_name)
+
         else:
             pageload_method = self.getPageloadEventDataNonExperiment
             crash_method = self.getCrashEventDataNonExperiment
@@ -198,43 +199,43 @@ class TelemetryClient:
 
         # Add pageload event metric queries
         for metric in self.config["pageload_event_metrics"]:
-            query_tasks.append({
-                'type': 'pageload',
-                'metric': metric,
-                'method': pageload_method
-            })
+            query_tasks.append(
+                {"type": "pageload", "metric": metric, "method": pageload_method}
+            )
 
         # Add crash event metric queries
         for metric in self.config["crash_event_metrics"]:
-            query_tasks.append({
-                'type': 'crash',
-                'metric': metric,
-                'method': crash_method
-            })
+            query_tasks.append(
+                {"type": "crash", "metric": metric, "method": crash_method}
+            )
 
         # Add histogram queries
         for histogram in self.config["histograms"]:
-            query_tasks.append({
-                'type': 'histogram',
-                'metric': histogram,
-                'method': lambda h=histogram: histogram_method(h)
-            })
+            query_tasks.append(
+                {
+                    "type": "histogram",
+                    "metric": histogram,
+                    "method": lambda h=histogram: histogram_method(h),
+                }
+            )
 
         # Execute all queries in parallel
         event_metrics = {}
         crash_metrics = {}
         histograms = {}
 
-        print(f"Running {len(query_tasks)} queries in parallel using {self.max_workers} threads...")
+        print(
+            f"Running {len(query_tasks)} queries in parallel using {self.max_workers} threads..."
+        )
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             # Submit all tasks
             future_to_task = {}
             for task in query_tasks:
-                if task['type'] == 'histogram':
-                    future = executor.submit(task['method'])
+                if task["type"] == "histogram":
+                    future = executor.submit(task["method"])
                 else:
-                    future = executor.submit(task['method'], task['metric'])
+                    future = executor.submit(task["method"], task["metric"])
                 future_to_task[future] = task
 
             # Collect results as they complete
@@ -246,8 +247,8 @@ class TelemetryClient:
                     print(df)
 
                     # Process based on metric type
-                    if task['type'] == 'pageload':
-                        metric = task['metric']
+                    if task["type"] == "pageload":
+                        metric = task["metric"]
                         if not invalidDataSet(
                             df,
                             f"pageload event: {metric}",
@@ -255,15 +256,17 @@ class TelemetryClient:
                             self.config["segments"],
                         ):
                             event_metrics[metric] = df
-                            invalid_combinations[f"pageload_{metric}"] = getInvalidBranchSegments(
-                                df,
-                                f"pageload event: {metric}",
-                                self.config["branches"],
-                                self.config["segments"],
+                            invalid_combinations[f"pageload_{metric}"] = (
+                                getInvalidBranchSegments(
+                                    df,
+                                    f"pageload event: {metric}",
+                                    self.config["branches"],
+                                    self.config["segments"],
+                                )
                             )
 
-                    elif task['type'] == 'crash':
-                        metric = task['metric']
+                    elif task["type"] == "crash":
+                        metric = task["metric"]
                         if not invalidDataSet(
                             df,
                             f"crash event: {metric}",
@@ -271,27 +274,41 @@ class TelemetryClient:
                             self.config["segments"],
                         ):
                             crash_metrics[metric] = df
-                            invalid_combinations[f"crash_{metric}"] = getInvalidBranchSegments(
-                                df,
-                                f"crash event: {metric}",
-                                self.config["branches"],
-                                self.config["segments"],
+                            invalid_combinations[f"crash_{metric}"] = (
+                                getInvalidBranchSegments(
+                                    df,
+                                    f"crash event: {metric}",
+                                    self.config["branches"],
+                                    self.config["segments"],
+                                )
                             )
 
-                    elif task['type'] == 'histogram':
-                        histogram = task['metric']
+                    elif task["type"] == "histogram":
+                        histogram = task["metric"]
                         if not invalidDataSet(
-                            df, histogram, self.config["branches"], self.config["segments"]
+                            df,
+                            histogram,
+                            self.config["branches"],
+                            self.config["segments"],
                         ):
                             histograms[histogram] = df
-                            invalid_combinations[f"histogram_{histogram}"] = getInvalidBranchSegments(
-                                df, histogram, self.config["branches"], self.config["segments"]
+                            invalid_combinations[f"histogram_{histogram}"] = (
+                                getInvalidBranchSegments(
+                                    df,
+                                    histogram,
+                                    self.config["branches"],
+                                    self.config["segments"],
+                                )
                             )
 
                 except Exception as e:
-                    print(f"Error processing {task['type']} query for {task['metric']}: {e}")
+                    print(
+                        f"Error processing {task['type']} query for {task['metric']}: {e}"
+                    )
 
-        print(f"Parallel query execution completed. Results: {len(event_metrics)} pageload, {len(crash_metrics)} crash, {len(histograms)} histogram metrics")
+        print(
+            f"Parallel query execution completed. Results: {len(event_metrics)} pageload, {len(crash_metrics)} crash, {len(histograms)} histogram metrics"
+        )
 
         return event_metrics, crash_metrics, histograms, invalid_combinations
 
@@ -461,7 +478,9 @@ class TelemetryClient:
 
     def getResultsForNonExperiment(self):
         # Execute all queries in parallel using consolidated method
-        event_metrics, crash_metrics, histograms, invalid_combinations = self._executeQueriesInParallel(is_experiment=False)
+        event_metrics, crash_metrics, histograms, invalid_combinations = (
+            self._executeQueriesInParallel(is_experiment=False)
+        )
 
         # Combine histogram and pageload event results.
         results = {}
@@ -495,7 +514,9 @@ class TelemetryClient:
 
     def getResultsForExperiment(self):
         # Execute all queries in parallel using consolidated method
-        event_metrics, crash_metrics, histograms, invalid_combinations = self._executeQueriesInParallel(is_experiment=True)
+        event_metrics, crash_metrics, histograms, invalid_combinations = (
+            self._executeQueriesInParallel(is_experiment=True)
+        )
 
         # Combine histogram and pageload event results.
         results = {}

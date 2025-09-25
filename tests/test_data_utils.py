@@ -68,15 +68,38 @@ def create_histogram_data(
             mean = stats_config["mean"]
             stddev = stats_config["stddev"]
 
-            # Add segment-specific variation to the statistics
-            segment_multiplier = 1.0
+            # Add segment-specific variation with balanced differences
+            base_multiplier = 1.0
             if segment == "Windows":
-                segment_multiplier = 1.1  # Slightly slower on Windows
+                base_multiplier = 1.08  # Moderately slower on Windows
             elif segment == "Mac":
-                segment_multiplier = 0.9  # Slightly faster on Mac
+                base_multiplier = 0.92  # Moderately faster on Mac
+            elif segment == "Linux":
+                base_multiplier = 1.0   # Baseline for Linux
+
+            # Add realistic random variation (±2%) to avoid perfect uniformity
+            random_variance = np.random.uniform(0.98, 1.02)
+            segment_multiplier = base_multiplier * random_variance
 
             adjusted_mean = mean * segment_multiplier
-            adjusted_stddev = stddev * segment_multiplier
+            # Ensure minimum variance (18% of mean) with subtle segment diversity
+            min_stddev = adjusted_mean * 0.18
+            adjusted_stddev = max(stddev * segment_multiplier, min_stddev)
+
+            # Add very subtle segment-specific variance to ensure distinct distributions
+            segment_variance_boost = 1.0
+            if segment == "Windows":
+                segment_variance_boost = 1.02  # Minimal variance boost on Windows
+            elif segment == "Mac":
+                segment_variance_boost = 1.01  # Tiny variance boost on Mac
+            elif segment == "Linux":
+                segment_variance_boost = 1.015  # Tiny variance boost on Linux
+
+            adjusted_stddev *= segment_variance_boost
+
+            # Add natural variation to sample sizes (±5%) but ensure minimum thresholds
+            sample_multiplier = np.random.uniform(0.95, 1.05)
+            actual_samples = max(int(total_samples * sample_multiplier), 1000)
 
             # Generate a log-normal distribution to match typical performance data
             # Log-normal is good for timing data as it's always positive and right-skewed
@@ -84,11 +107,29 @@ def create_histogram_data(
             # Calculate log-normal parameters from desired mean and stddev
             # For log-normal: mean = exp(mu + sigma^2/2), var = exp(2*mu + sigma^2) * (exp(sigma^2) - 1)
             variance = adjusted_stddev**2
-            mu = np.log(adjusted_mean**2 / np.sqrt(variance + adjusted_mean**2))
-            sigma = np.sqrt(np.log(1 + variance / adjusted_mean**2))
+
+            # Add small epsilon to prevent numerical instability
+            epsilon = 1e-10
+            variance = max(variance, epsilon)
+            adjusted_mean = max(adjusted_mean, epsilon)
+
+            # Calculate log-normal parameters with numerical stability
+            cv_squared = variance / (adjusted_mean**2)  # Coefficient of variation squared
+            mu = np.log(adjusted_mean / np.sqrt(1 + cv_squared))
+            sigma = np.sqrt(np.log(1 + cv_squared))
+
+            # Ensure sigma is not too small to avoid numerical issues
+            # Add branch-specific sigma adjustment to ensure distinct distributions
+            branch_sigma_multiplier = 1.0
+            if branch == "control":
+                branch_sigma_multiplier = 1.05  # Slightly more spread for control
+            elif branch == "treatment":
+                branch_sigma_multiplier = 0.98  # Slightly less spread for treatment
+
+            sigma = max(sigma * branch_sigma_multiplier, 0.12)
 
             # Generate samples from log-normal distribution
-            samples = np.random.lognormal(mu, sigma, total_samples)
+            samples = np.random.lognormal(mu, sigma, actual_samples)
 
             # Ensure samples are within reasonable bounds (positive and not too extreme)
             samples = np.clip(samples, 10, 50000)
@@ -205,15 +246,38 @@ def create_pageload_event_data(
             mean = stats_config["mean"]
             stddev = stats_config["stddev"]
 
-            # Add segment-specific variation to the statistics
-            segment_multiplier = 1.0
+            # Add segment-specific variation with balanced differences
+            base_multiplier = 1.0
             if segment == "Windows":
-                segment_multiplier = 1.1  # Slightly slower on Windows
+                base_multiplier = 1.08  # Moderately slower on Windows
             elif segment == "Mac":
-                segment_multiplier = 0.9  # Slightly faster on Mac
+                base_multiplier = 0.92  # Moderately faster on Mac
+            elif segment == "Linux":
+                base_multiplier = 1.0   # Baseline for Linux
+
+            # Add realistic random variation (±2%) to avoid perfect uniformity
+            random_variance = np.random.uniform(0.98, 1.02)
+            segment_multiplier = base_multiplier * random_variance
 
             adjusted_mean = mean * segment_multiplier
-            adjusted_stddev = stddev * segment_multiplier
+            # Ensure minimum variance (18% of mean) with subtle segment diversity
+            min_stddev = adjusted_mean * 0.18
+            adjusted_stddev = max(stddev * segment_multiplier, min_stddev)
+
+            # Add very subtle segment-specific variance to ensure distinct distributions
+            segment_variance_boost = 1.0
+            if segment == "Windows":
+                segment_variance_boost = 1.02  # Minimal variance boost on Windows
+            elif segment == "Mac":
+                segment_variance_boost = 1.01  # Tiny variance boost on Mac
+            elif segment == "Linux":
+                segment_variance_boost = 1.015  # Tiny variance boost on Linux
+
+            adjusted_stddev *= segment_variance_boost
+
+            # Add natural variation to sample sizes (±5%) but ensure minimum thresholds
+            sample_multiplier = np.random.uniform(0.95, 1.05)
+            actual_samples = max(int(total_samples * sample_multiplier), 1000)
 
             # Generate a log-normal distribution to match typical performance data
             # Log-normal is good for timing data as it's always positive and right-skewed
@@ -221,11 +285,29 @@ def create_pageload_event_data(
             # Calculate log-normal parameters from desired mean and stddev
             # For log-normal: mean = exp(mu + sigma^2/2), var = exp(2*mu + sigma^2) * (exp(sigma^2) - 1)
             variance = adjusted_stddev**2
-            mu = np.log(adjusted_mean**2 / np.sqrt(variance + adjusted_mean**2))
-            sigma = np.sqrt(np.log(1 + variance / adjusted_mean**2))
+
+            # Add small epsilon to prevent numerical instability
+            epsilon = 1e-10
+            variance = max(variance, epsilon)
+            adjusted_mean = max(adjusted_mean, epsilon)
+
+            # Calculate log-normal parameters with numerical stability
+            cv_squared = variance / (adjusted_mean**2)  # Coefficient of variation squared
+            mu = np.log(adjusted_mean / np.sqrt(1 + cv_squared))
+            sigma = np.sqrt(np.log(1 + cv_squared))
+
+            # Ensure sigma is not too small to avoid numerical issues
+            # Add branch-specific sigma adjustment to ensure distinct distributions
+            branch_sigma_multiplier = 1.0
+            if branch == "control":
+                branch_sigma_multiplier = 1.05  # Slightly more spread for control
+            elif branch == "treatment":
+                branch_sigma_multiplier = 0.98  # Slightly less spread for treatment
+
+            sigma = max(sigma * branch_sigma_multiplier, 0.12)
 
             # Generate samples from log-normal distribution
-            samples = np.random.lognormal(mu, sigma, total_samples)
+            samples = np.random.lognormal(mu, sigma, actual_samples)
 
             # Ensure samples are within reasonable bounds for event metrics
             min_bound = 50  # 50ms minimum
@@ -348,3 +430,67 @@ def create_test_config(slug, config_overrides=None):
         default_config.update(config_overrides)
 
     return default_config
+
+
+def create_crash_event_data(
+    data_dir,
+    slug,
+    metric_name="total_crashes",
+    branches=None,
+    segments=None,
+    crash_counts=None,
+):
+    """Create artificial crash event data.
+
+    Args:
+        data_dir: Directory to save the data file
+        slug: Experiment slug for filename
+        metric_name: Name of crash metric (defaults to "total_crashes")
+        branches: List of branch names (defaults to ["control", "treatment"])
+        segments: List of segment names (defaults to ["Windows", "Linux", "Mac"])
+        crash_counts: Dictionary mapping branch names to crash counts
+                     If None, uses default values (control higher, treatment lower)
+    """
+    if branches is None:
+        branches = ["control", "treatment"]
+    if segments is None:
+        segments = ["Windows", "Linux", "Mac"]
+
+    # Set default crash counts if not provided
+    if crash_counts is None:
+        crash_counts = {
+            "control": {"Windows": 1500, "Linux": 800, "Mac": 300},
+            "treatment": {"Windows": 1200, "Linux": 650, "Mac": 250},
+            "default": {"Windows": 1300, "Linux": 700, "Mac": 275},
+        }
+
+    # Generate crash data for each branch and segment with realistic variance
+    data_rows = []
+    for branch in branches:
+        for segment in segments:
+            # Get crash count for this branch/segment
+            if branch in crash_counts:
+                base_count = crash_counts[branch].get(segment, 100)
+            else:
+                base_count = crash_counts.get("default", {}).get(segment, 100)
+
+            # Add realistic random variation (±10%) to crash counts to avoid identical values
+            crash_count = int(base_count * np.random.uniform(0.9, 1.1))
+            # Ensure minimum count to avoid zero values
+            crash_count = max(crash_count, 1)
+
+            data_rows.append(
+                {"segment": segment, "branch": branch, "crash_count": crash_count}
+            )
+
+    # Create DataFrame and save to pickle
+    df = pd.DataFrame(data_rows)
+    experiment_data_dir = os.path.join(data_dir, slug)
+    os.makedirs(experiment_data_dir, exist_ok=True)
+
+    filename = f"{slug}-crash-events-{metric_name}.pkl"
+    filepath = os.path.join(experiment_data_dir, filename)
+    df.to_pickle(filepath)
+
+    print(f"Created crash event data: {filename} with {len(df)} rows")
+    return df

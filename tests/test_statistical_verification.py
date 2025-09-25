@@ -15,6 +15,8 @@ import unittest
 import json
 import yaml
 import pandas as pd
+import warnings
+import numpy as np
 from unittest.mock import patch, MagicMock
 
 # Add lib directory to path
@@ -33,6 +35,17 @@ class TestStatisticalVerification(unittest.TestCase):
 
     def setUp(self):
         """Create temporary directories and test data with known statistics."""
+        # Set random seed for reproducible results in statistical verification
+        np.random.seed(42)
+
+        # Suppress scipy precision loss warnings that occur with synthetic data
+        warnings.filterwarnings(
+            "ignore",
+            message="Precision loss occurred in moment calculation due to catastrophic cancellation.*",
+            category=RuntimeWarning,
+            module="scipy.*"
+        )
+
         self.test_dir = tempfile.mkdtemp()
         self.data_dir = os.path.join(self.test_dir, "data")
         self.reports_dir = os.path.join(self.test_dir, "reports")
