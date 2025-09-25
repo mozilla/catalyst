@@ -41,3 +41,8 @@ events:
         max: 30000
       response_time:
         max: 30000
+
+# Performance tuning (optional)
+# Number of parallel threads for BigQuery telemetry data fetching
+# Default: 4 (recommended for most cases)
+# max_parallel_queries: 4

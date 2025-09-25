@@ -7,6 +7,7 @@ execute them, and process histogram and pageload event metrics data.
 
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Any, Optional
 import pandas as pd
 from google.cloud import bigquery
@@ -158,8 +159,141 @@ class TelemetryClient:
         self.skipCache = skipCache
         self.queries: List[Dict[str, str]] = []
 
+        # Configure parallel query execution
+        # Default to 4 threads - good balance between performance and resource usage
+        self.max_workers = config.get("max_parallel_queries", 4)
+
         # Ensure data directory exists
         os.makedirs(dataDir, exist_ok=True)
+
+    def _executeQueriesInParallel(self, is_experiment: bool = True):
+        """
+        Execute telemetry queries in parallel for all metric types.
+
+        Args:
+            is_experiment: If True, use experiment methods, otherwise use non-experiment methods
+
+        Returns:
+            Tuple of (event_metrics, crash_metrics, histograms, invalid_combinations)
+        """
+        # Track invalid branch/segment combinations for each metric
+        invalid_combinations = {}
+
+        # Prepare all queries to run in parallel
+        query_tasks = []
+
+        # Select appropriate methods based on experiment type
+        if is_experiment:
+            pageload_method = self.getPageloadEventData
+            crash_method = self.getCrashEventData
+
+            def histogram_method(histogram_name):
+                return self.getHistogramData(self.config, histogram_name)
+        else:
+            pageload_method = self.getPageloadEventDataNonExperiment
+            crash_method = self.getCrashEventDataNonExperiment
+
+            def histogram_method(histogram_name):
+                return self.getHistogramDataNonExperiment(self.config, histogram_name)
+
+        # Add pageload event metric queries
+        for metric in self.config["pageload_event_metrics"]:
+            query_tasks.append({
+                'type': 'pageload',
+                'metric': metric,
+                'method': pageload_method
+            })
+
+        # Add crash event metric queries
+        for metric in self.config["crash_event_metrics"]:
+            query_tasks.append({
+                'type': 'crash',
+                'metric': metric,
+                'method': crash_method
+            })
+
+        # Add histogram queries
+        for histogram in self.config["histograms"]:
+            query_tasks.append({
+                'type': 'histogram',
+                'metric': histogram,
+                'method': lambda h=histogram: histogram_method(h)
+            })
+
+        # Execute all queries in parallel
+        event_metrics = {}
+        crash_metrics = {}
+        histograms = {}
+
+        print(f"Running {len(query_tasks)} queries in parallel using {self.max_workers} threads...")
+
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # Submit all tasks
+            future_to_task = {}
+            for task in query_tasks:
+                if task['type'] == 'histogram':
+                    future = executor.submit(task['method'])
+                else:
+                    future = executor.submit(task['method'], task['metric'])
+                future_to_task[future] = task
+
+            # Collect results as they complete
+            for future in as_completed(future_to_task):
+                task = future_to_task[future]
+                try:
+                    df = future.result()
+                    print(f"Completed {task['type']} query for {task['metric']}")
+                    print(df)
+
+                    # Process based on metric type
+                    if task['type'] == 'pageload':
+                        metric = task['metric']
+                        if not invalidDataSet(
+                            df,
+                            f"pageload event: {metric}",
+                            self.config["branches"],
+                            self.config["segments"],
+                        ):
+                            event_metrics[metric] = df
+                            invalid_combinations[f"pageload_{metric}"] = getInvalidBranchSegments(
+                                df,
+                                f"pageload event: {metric}",
+                                self.config["branches"],
+                                self.config["segments"],
+                            )
+
+                    elif task['type'] == 'crash':
+                        metric = task['metric']
+                        if not invalidDataSet(
+                            df,
+                            f"crash event: {metric}",
+                            self.config["branches"],
+                            self.config["segments"],
+                        ):
+                            crash_metrics[metric] = df
+                            invalid_combinations[f"crash_{metric}"] = getInvalidBranchSegments(
+                                df,
+                                f"crash event: {metric}",
+                                self.config["branches"],
+                                self.config["segments"],
+                            )
+
+                    elif task['type'] == 'histogram':
+                        histogram = task['metric']
+                        if not invalidDataSet(
+                            df, histogram, self.config["branches"], self.config["segments"]
+                        ):
+                            histograms[histogram] = df
+                            invalid_combinations[f"histogram_{histogram}"] = getInvalidBranchSegments(
+                                df, histogram, self.config["branches"], self.config["segments"]
+                            )
+
+                except Exception as e:
+                    print(f"Error processing {task['type']} query for {task['metric']}: {e}")
+
+        print(f"Parallel query execution completed. Results: {len(event_metrics)} pageload, {len(crash_metrics)} crash, {len(histograms)} histogram metrics")
+
+        return event_metrics, crash_metrics, histograms, invalid_combinations
 
     def collectResultsFromQuery_OS_segments(
         self,
@@ -326,71 +460,8 @@ class TelemetryClient:
             return self.getResultsForNonExperiment()
 
     def getResultsForNonExperiment(self):
-        # Track invalid branch/segment combinations for each metric
-        invalid_combinations = {}
-
-        # Get data for each pageload event metric.
-        event_metrics = {}
-        for metric in self.config["pageload_event_metrics"]:
-            df = self.getPageloadEventDataNonExperiment(metric)
-            print(df)
-
-            # Remove pageload events that have no data.
-            if invalidDataSet(
-                df,
-                f"pageload event: {metric}",
-                self.config["branches"],
-                self.config["segments"],
-            ):
-                continue
-
-            event_metrics[metric] = df
-            invalid_combinations[f"pageload_{metric}"] = getInvalidBranchSegments(
-                df,
-                f"pageload event: {metric}",
-                self.config["branches"],
-                self.config["segments"],
-            )
-
-        # Get data for each crash event metric.
-        crash_metrics = {}
-        for metric in self.config["crash_event_metrics"]:
-            df = self.getCrashEventDataNonExperiment(metric)
-            print(df)
-
-            # Remove crash events that have no data.
-            if invalidDataSet(
-                df,
-                f"crash event: {metric}",
-                self.config["branches"],
-                self.config["segments"],
-            ):
-                continue
-
-            crash_metrics[metric] = df
-            invalid_combinations[f"crash_{metric}"] = getInvalidBranchSegments(
-                df,
-                f"crash event: {metric}",
-                self.config["branches"],
-                self.config["segments"],
-            )
-
-        # Get data for each histogram in this segment.
-        histograms = {}
-        for histogram in self.config["histograms"]:
-            df = self.getHistogramDataNonExperiment(self.config, histogram)
-            print(df)
-
-            # Remove histograms that are empty.
-            if invalidDataSet(
-                df, histogram, self.config["branches"], self.config["segments"]
-            ):
-                continue
-
-            histograms[histogram] = df
-            invalid_combinations[f"histogram_{histogram}"] = getInvalidBranchSegments(
-                df, histogram, self.config["branches"], self.config["segments"]
-            )
+        # Execute all queries in parallel using consolidated method
+        event_metrics, crash_metrics, histograms, invalid_combinations = self._executeQueriesInParallel(is_experiment=False)
 
         # Combine histogram and pageload event results.
         results = {}
@@ -423,71 +494,8 @@ class TelemetryClient:
         return results
 
     def getResultsForExperiment(self):
-        # Track invalid branch/segment combinations for each metric
-        invalid_combinations = {}
-
-        # Get data for each pageload event metric.
-        event_metrics = {}
-        for metric in self.config["pageload_event_metrics"]:
-            df = self.getPageloadEventData(metric)
-            print(df)
-
-            # Remove pageload events that have no data.
-            if invalidDataSet(
-                df,
-                f"pageload event: {metric}",
-                self.config["branches"],
-                self.config["segments"],
-            ):
-                # Completely invalid - skip this metric
-                continue
-
-            event_metrics[metric] = df
-            invalid_combinations[f"pageload_{metric}"] = getInvalidBranchSegments(
-                df,
-                f"pageload event: {metric}",
-                self.config["branches"],
-                self.config["segments"],
-            )
-
-        # Get data for each crash event metric.
-        crash_metrics = {}
-        for metric in self.config["crash_event_metrics"]:
-            df = self.getCrashEventData(metric)
-            print(df)
-
-            # Remove crash events that have no data.
-            if invalidDataSet(
-                df,
-                f"crash event: {metric}",
-                self.config["branches"],
-                self.config["segments"],
-            ):
-                continue
-
-            crash_metrics[metric] = df
-            invalid_combinations[f"crash_{metric}"] = getInvalidBranchSegments(
-                df,
-                f"crash event: {metric}",
-                self.config["branches"],
-                self.config["segments"],
-            )
-
-        # Get data for each histogram in this segment.
-        histograms = {}
-        for histogram in self.config["histograms"]:
-            df = self.getHistogramData(self.config, histogram)
-
-            # Mark histograms that have invalid data sets.
-            if invalidDataSet(
-                df, histogram, self.config["branches"], self.config["segments"]
-            ):
-                continue
-
-            histograms[histogram] = df
-            invalid_combinations[f"histogram_{histogram}"] = getInvalidBranchSegments(
-                df, histogram, self.config["branches"], self.config["segments"]
-            )
+        # Execute all queries in parallel using consolidated method
+        event_metrics, crash_metrics, histograms, invalid_combinations = self._executeQueriesInParallel(is_experiment=True)
 
         # Combine histogram and pageload event results.
         results = {}
