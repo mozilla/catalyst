@@ -76,7 +76,7 @@ def filter_and_sort(experiments):
     experiments.sort(key=lambda x: x["endDate"])
 
 def retrieve_nimbus_experiment_list():
-  url = 'https://experimenter.services.mozilla.com/api/v6/experiments/'
+  url = 'https://experimenter.services.mozilla.com/api/v7/experiments/'
   max_retries = 3
   timeout = 60  # seconds
   retry_delay = 60  # seconds
@@ -172,9 +172,13 @@ def create_config_for_experiment(exp):
   args.skip_cache = False
   args.html_report = True
 
-  # Set default of 7 days for release experiments
-  if exp.get('channel') == 'release':
-    args.max_duration_days = 7
+  # Set default of 14 days for release experiments
+  # Check both 'channel' (string) and 'channels' (array) fields
+  channels = exp.get('channels', [])
+  is_release = exp.get('channel') == 'release' or 'release' in channels
+
+  if is_release:
+    args.max_duration_days = 14
   else:
     args.max_duration_days = None
 
