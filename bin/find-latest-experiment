@@ -153,7 +153,8 @@ def create_config_for_experiment(exp):
     config['segments'] = ['Android']
 
   config['histograms'] = generate_histogram_metrics(exp)
-  config['pageload_event_metrics'] = generate_event_metrics(exp)
+  # Use new events format instead of legacy pageload_event_metrics
+  config['events'] = ['crash', {'pageload': generate_event_metrics(exp)}]
 
   configFile = f"{exp['slug']}.yaml"
   with open(configFile, 'w') as f:

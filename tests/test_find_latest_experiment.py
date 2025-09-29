@@ -256,7 +256,12 @@ class TestFindLatestExperiment(unittest.TestCase):
             self.assertEqual(config["slug"], "desktop-test")
             self.assertEqual(config["segments"], ["Windows", "Linux", "Mac"])
             self.assertIn("histograms", config)
-            self.assertIn("pageload_event_metrics", config)
+            self.assertIn("events", config)
+            # Check that crash events are included
+            self.assertIn("crash", config["events"])
+            # Check that pageload events are included
+            pageload_events = [event for event in config["events"] if isinstance(event, dict) and "pageload" in event]
+            self.assertEqual(len(pageload_events), 1)
 
         finally:
             os.chdir(original_cwd)
@@ -282,7 +287,12 @@ class TestFindLatestExperiment(unittest.TestCase):
             self.assertEqual(config["slug"], "mobile-test")
             self.assertEqual(config["segments"], ["Android"])
             self.assertIn("histograms", config)
-            self.assertIn("pageload_event_metrics", config)
+            self.assertIn("events", config)
+            # Check that crash events are included
+            self.assertIn("crash", config["events"])
+            # Check that pageload events are included
+            pageload_events = [event for event in config["events"] if isinstance(event, dict) and "pageload" in event]
+            self.assertEqual(len(pageload_events), 1)
 
         finally:
             os.chdir(original_cwd)
