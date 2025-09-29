@@ -32,6 +32,3 @@ package.json
 .vscode/
 .idea/
 *.sublime-*
-
-# Temporary yaml configs
-*.yaml

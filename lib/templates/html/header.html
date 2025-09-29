@@ -160,67 +160,63 @@ div.chart {
   -ms-transition: all .3s ease-in-out;
   transition: all .3s ease-in-out;
   z-index: 100;
-  #leftside-navigation {
-    ul, ul ul {
-      margin: -2px 0 0;
-      padding: 0;
-    }
-    ul {
-      li {
-        list-style-type: none;
-        border-bottom: 1px solid rgba(255,255,255,.05);
-        &.active {
-          & > a {
-            color: #ececec;
-          }
-          ul {
-            display: block;
-          }
-        }
-        a {
-          color: #000000;
-          text-decoration: none;
-          display: block;
-          padding: 18px 0 18px 25px;
-          font-size: 16px;
-          outline: 0;
-          -webkit-transition: all 200ms ease-in;
-          -moz-transition: all 200ms ease-in;
-          -o-transition: all 200ms ease-in;
-          -ms-transition: all 200ms ease-in;
-          transition: all 200ms ease-in;
-          &:hover {
-            color: #1abc9c;
-          }
-          span {
-            display: inline-block;
-          }
-          i {
-            width: 20px;
-            .fa-angle-left, .fa-angle-right {
-              padding-top: 3px;
-            }
-          }
-        }
-      }
-    }
-    ul ul {
-      display: none;
-      li {
-        background: #ececec;
-        margin-bottom: 0;
-        margin-left: 0;
-        margin-right: 0;
-        border-bottom: none;
-        a {
-          font-size: 14px;
-          padding-top: 13px;
-          padding-bottom: 13px;
-          color: #000000;
-        }
-      }
-    }
-  }
+}
+#leftside-navigation ul,
+#leftside-navigation ul ul {
+  margin: -2px 0 0;
+  padding: 0;
+}
+#leftside-navigation ul li {
+  list-style-type: none;
+  border-bottom: 1px solid rgba(255,255,255,.05);
+}
+#leftside-navigation ul li.active > a {
+  color: #ececec;
+}
+#leftside-navigation ul li.active ul {
+  display: block;
+}
+#leftside-navigation ul li a {
+  color: #000000;
+  text-decoration: none;
+  display: block;
+  padding: 18px 0 18px 25px;
+  font-size: 16px;
+  outline: 0;
+  -webkit-transition: all 200ms ease-in;
+  -moz-transition: all 200ms ease-in;
+  -o-transition: all 200ms ease-in;
+  -ms-transition: all 200ms ease-in;
+  transition: all 200ms ease-in;
+}
+#leftside-navigation ul li a:hover {
+  color: #1abc9c;
+}
+#leftside-navigation ul li a span {
+  display: inline-block;
+}
+#leftside-navigation ul li a i {
+  width: 20px;
+}
+#leftside-navigation ul li a i .fa-angle-left,
+#leftside-navigation ul li a i .fa-angle-right {
+  padding-top: 3px;
+}
+#leftside-navigation ul ul {
+  display: none;
+}
+#leftside-navigation ul ul li {
+  background: #ececec;
+  margin-bottom: 0;
+  margin-left: 0;
+  margin-right: 0;
+  border-bottom: none;
+}
+#leftside-navigation ul ul li a {
+  font-size: 14px;
+  padding-top: 13px;
+  padding-bottom: 13px;
+  color: #000000;
 }
 .stat-table {
     table-layout: fixed;
@@ -287,12 +283,12 @@ div.chart {
     text-align:center;
     padding:($half-spacing-unit * 1.5) 10;
     font-size: 14px;
-        a {
-          font-size: 14px;
-          padding-top: 13px;
-          padding-bottom: 13px;
-          color: #000000;
-        }
+}
+.summary-table a {
+  font-size: 14px;
+  padding-top: 13px;
+  padding-bottom: 13px;
+  color: #000000;
 }
 .summary-table thead tr {
     background-color: gray;

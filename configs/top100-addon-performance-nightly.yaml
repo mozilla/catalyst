@@ -1,0 +1,77 @@
+# Addon vs No-Addon Performance Comparison Report
+# Compares performance metrics between users with addons vs users with NO addons
+# Uses proper addon filtering criteria from addon_penetration_glean.sql
+# Date range: Sept 1 - Sept 30, 2025
+
+slug: top100-addon-performance-comparison-nightly
+
+# Two branches representing different user populations
+# "no addons" is the control group (users with NO addons using proper filtering)
+
+# CTE to get top 100 addons
+prerequisite_ctes: |
+  top_100_addons AS (
+    SELECT addon_id
+    FROM (
+      SELECT addon_id, avg(dau) as DAU
+      FROM mozdata.telemetry.addons_daily
+      WHERE submission_date >= DATE('{{start_date}}')
+        AND submission_date <= DATE('{{end_date}}')
+        AND is_system = false
+        AND addon_id not like '%mozilla%'
+      GROUP BY 1
+      ORDER BY 2 DESC
+      LIMIT 100
+    )
+  )
+
+branches:
+  - name: "no addons"
+    startDate: '2025-08-01'
+    endDate: '2025-08-07'
+    channel: "nightly"
+    # Users with NO addons using proper filtering criteria (CONTROL GROUP)
+    custom_condition: |
+      m.metrics.object.addons_active_addons IS NULL
+  - name: "has addons"
+    startDate: '2025-08-01'
+    endDate: '2025-08-07'
+    channel: "nightly"
+    # Users who have at least one of the top 100 addons by DAU (TREATMENT GROUP)
+    custom_condition: |
+      EXISTS(
+        SELECT 1
+        FROM UNNEST(JSON_EXTRACT_ARRAY(m.metrics.object.addons_active_addons)) AS addon
+        JOIN top_100_addons t100 ON JSON_EXTRACT_SCALAR(addon, '$.id') = t100.addon_id
+      )
+
+# Traditional OS segments
+segments:
+  - Windows
+  - Linux
+  - Mac
+  - Android
+
+# Performance histogram metrics to analyze (using simple list format)
+histograms:
+  # Memory
+  - metrics.memory_distribution.memory_total
+  - metrics.memory_distribution.memory_heap_allocated
+
+  # Top level pageload
+  - metrics.timing_distribution.performance_pageload_fcp
+  - metrics.timing_distribution.performance_time_response_start
+  - metrics.timing_distribution.performance_pageload_load_time
+  - metrics.timing_distribution.perf_largest_contentful_paint
+
+  # Networking
+  - metrics.timing_distribution.networking_dns_lookup_time
+  - metrics.timing_distribution.network_tcp_connection
+  - metrics.timing_distribution.network_tls_handshake
+  - metrics.timing_distribution.networking_transaction_wait_time
+
+  # Gfx
+  - metrics.timing_distribution.gfx_composite_time
+  - metrics.timing_distribution.gfx_content_paint_time
+
+max_parallel_queries: 8

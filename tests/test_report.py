@@ -28,6 +28,7 @@ class TestHTMLReportGeneration(unittest.TestCase):
                         "fcp_time": {
                             "desc": "Time to first contentful paint",
                             "mean": 1500.5,
+                            "median": 1450.0,
                             "n": 1000,
                             "confidence": {"min": 0, "max": 0},
                             "se": 0,
@@ -49,6 +50,7 @@ class TestHTMLReportGeneration(unittest.TestCase):
                         "fcp_time": {
                             "desc": "Time to first contentful paint",
                             "mean": 1600.2,
+                            "median": 1550.0,
                             "n": 800,
                             "confidence": {"min": 0, "max": 0},
                             "se": 0,
@@ -72,6 +74,7 @@ class TestHTMLReportGeneration(unittest.TestCase):
                         "fcp_time": {
                             "desc": "Time to first contentful paint",
                             "mean": 1450.8,
+                            "median": 1400.0,
                             "n": 950,
                             "confidence": {"min": 0, "max": 0},
                             "se": 0,
@@ -97,6 +100,7 @@ class TestHTMLReportGeneration(unittest.TestCase):
                         "fcp_time": {
                             "desc": "Time to first contentful paint",
                             "mean": 1580.1,
+                            "median": 1530.0,
                             "n": 750,
                             "confidence": {"min": 0, "max": 0},
                             "se": 0,

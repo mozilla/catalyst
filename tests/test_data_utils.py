@@ -75,7 +75,7 @@ def create_histogram_data(
             elif segment == "Mac":
                 base_multiplier = 0.92  # Moderately faster on Mac
             elif segment == "Linux":
-                base_multiplier = 1.0   # Baseline for Linux
+                base_multiplier = 1.0  # Baseline for Linux
 
             # Add realistic random variation (±2%) to avoid perfect uniformity
             random_variance = np.random.uniform(0.98, 1.02)
@@ -114,7 +114,9 @@ def create_histogram_data(
             adjusted_mean = max(adjusted_mean, epsilon)
 
             # Calculate log-normal parameters with numerical stability
-            cv_squared = variance / (adjusted_mean**2)  # Coefficient of variation squared
+            cv_squared = variance / (
+                adjusted_mean**2
+            )  # Coefficient of variation squared
             mu = np.log(adjusted_mean / np.sqrt(1 + cv_squared))
             sigma = np.sqrt(np.log(1 + cv_squared))
 
@@ -253,7 +255,7 @@ def create_pageload_event_data(
             elif segment == "Mac":
                 base_multiplier = 0.92  # Moderately faster on Mac
             elif segment == "Linux":
-                base_multiplier = 1.0   # Baseline for Linux
+                base_multiplier = 1.0  # Baseline for Linux
 
             # Add realistic random variation (±2%) to avoid perfect uniformity
             random_variance = np.random.uniform(0.98, 1.02)
@@ -292,7 +294,9 @@ def create_pageload_event_data(
             adjusted_mean = max(adjusted_mean, epsilon)
 
             # Calculate log-normal parameters with numerical stability
-            cv_squared = variance / (adjusted_mean**2)  # Coefficient of variation squared
+            cv_squared = variance / (
+                adjusted_mean**2
+            )  # Coefficient of variation squared
             mu = np.log(adjusted_mean / np.sqrt(1 + cv_squared))
             sigma = np.sqrt(np.log(1 + cv_squared))
 

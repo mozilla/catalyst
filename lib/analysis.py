@@ -124,6 +124,39 @@ def calc_histogram_mean_var(bins, counts):
     return [mean, var, std, n]
 
 
+def calc_histogram_median(bins, counts):
+    """Calculate median from histogram bins and counts."""
+    total_count = sum(counts)
+    if total_count == 0:
+        return 0.0
+
+    # Find the bin containing the median (50th percentile)
+    target = total_count / 2.0
+    cumulative = 0
+
+    for i, count in enumerate(counts):
+        cumulative += count
+        if cumulative >= target:
+            # Linear interpolation within the bin
+            if count == 0:
+                return bins[i]
+
+            # How far into the bin is the median?
+            remaining = target - (cumulative - count)
+            fraction = remaining / count
+
+            # If we're at the last bin, just return the bin value
+            if i == len(bins) - 1:
+                return bins[i]
+
+            # Interpolate between this bin and the next
+            bin_width = bins[i + 1] - bins[i] if i < len(bins) - 1 else 0
+            return bins[i] + fraction * bin_width
+
+    # Fallback - should not reach here
+    return bins[-1] if bins else 0.0
+
+
 def calculate_histogram_stats(bins, counts, data):
     # Calculate mean, std, and var
     [mean, var, std, n] = calc_histogram_mean_var(bins, counts)
@@ -131,6 +164,10 @@ def calculate_histogram_stats(bins, counts, data):
     data["std"] = std
     data["var"] = var
     data["n"] = n
+
+    # Calculate median
+    median = calc_histogram_median(bins, counts)
+    data["median"] = median
 
     # Calculate densities
     [density, cdf] = calc_histogram_density(counts, n)

@@ -516,6 +516,34 @@ class TestParser(unittest.TestCase):
         self.assertIn("total_crashes", config["crash_event_metrics"])
         # Data type consolidation happens at analysis stage, not parsing stage
 
+    def test_check_for_local_file_nonexistent(self):
+        """Test checkForLocalFile with nonexistent file."""
+        result = checkForLocalFile("/nonexistent/path")
+        self.assertIsNone(result)
+
+    def test_check_for_local_file_valid_json(self):
+        """Test checkForLocalFile with valid JSON."""
+        test_data = {"test": "data", "number": 42}
+        test_file = os.path.join(self.temp_dir, "test.json")
+
+        with open(test_file, "w") as f:
+            json.dump(test_data, f)
+
+        result = checkForLocalFile(test_file)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["test"], "data")
+        self.assertEqual(result["number"], 42)
+
+    def test_check_for_local_file_invalid_json(self):
+        """Test checkForLocalFile with invalid JSON."""
+        test_file = os.path.join(self.temp_dir, "invalid.json")
+
+        with open(test_file, "w") as f:
+            f.write("{ invalid json")
+
+        result = checkForLocalFile(test_file)
+        self.assertIsNone(result)
+
 
 if __name__ == "__main__":
     unittest.main()

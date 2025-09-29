@@ -207,8 +207,12 @@ def annotateHistograms(config: Dict[str, Any], probeIndex: Dict[str, Any]) -> No
             elif "desktop" in schema["repos"]:
                 config["histograms"][hist]["available_on_desktop"] = True
 
-            # Support timing and memory distribution types.
-            if schema["type"] in ["timing_distribution", "memory_distribution"]:
+            # Support timing, memory, and custom distribution types.
+            if schema["type"] in [
+                "timing_distribution",
+                "memory_distribution",
+                "custom_distribution",
+            ]:
                 config["histograms"][hist]["kind"] = "numerical"
             else:
                 type = schema["type"]
@@ -260,8 +264,12 @@ def annotateHistograms(config: Dict[str, Any], probeIndex: Dict[str, Any]) -> No
             elif "desktop" in schema["repos"]:
                 config["histograms"][hist]["available_on_desktop"] = True
 
-            # Support timing and memory distribution types.
-            if schema["type"] in ["timing_distribution", "memory_distribution"]:
+            # Support timing, memory, and custom distribution types.
+            if schema["type"] in [
+                "timing_distribution",
+                "memory_distribution",
+                "custom_distribution",
+            ]:
                 config["histograms"][hist]["kind"] = "numerical"
             else:
                 type = schema["type"]
@@ -501,5 +509,16 @@ def parseConfigFile(configFile: str) -> Dict[str, Any]:
         config["is_experiment"] = False
     else:
         config["is_experiment"] = True
+
+    # Handle custom branch conditions if present
+    if "prerequisite_cte" in config:
+        config["prerequisite_ctes"] = config["prerequisite_cte"]
+
+    # Mark if branches have custom conditions
+    has_custom_branches = any(
+        "custom_condition" in branch for branch in config.get("branches", [])
+    )
+    if has_custom_branches:
+        config["has_custom_branches"] = True
 
     return config

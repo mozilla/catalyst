@@ -394,16 +394,30 @@ class ReportGenerator:
                                 metric_data = self.data[branch_name][segment][
                                     data_type
                                 ][metric]
-                                mean = f"{metric_data['mean']:.1f}"
+                                median = f"{metric_data['median']:.1f}"
                                 std = f"{metric_data['std']:.1f}"
 
-                                # Calculate uplift
-                                branch_mean = metric_data["mean"]
-                                control_mean = self.data[control_name][segment][
-                                    data_type
-                                ][metric]["mean"]
+                                # Calculate uplift using median
+                                branch_median = metric_data["median"]
+
+                                # Check if the metric exists in the control branch for this segment
+                                if (
+                                    control_name in self.data
+                                    and segment in self.data[control_name]
+                                    and data_type in self.data[control_name][segment]
+                                    and metric
+                                    in self.data[control_name][segment][data_type]
+                                ):
+                                    control_median = self.data[control_name][segment][
+                                        data_type
+                                    ][metric]["median"]
+                                else:
+                                    # Skip this metric if it doesn't exist in control for this segment
+                                    continue
                                 uplift = (
-                                    (branch_mean - control_mean) / control_mean * 100.0
+                                    (branch_median - control_median)
+                                    / control_median
+                                    * 100.0
                                 )
                                 uplift_str = (
                                     f"+{uplift:.1f}" if uplift > 0 else f"{uplift:.1f}"
@@ -419,7 +433,7 @@ class ReportGenerator:
                                     effect_meaning = get_rank_biserial_corr_meaning(
                                         effect_size
                                     )
-                                    effect = f"{effect_meaning} (r={effect_size:.2f})"
+                                    effect = f"{effect_meaning} (p={pval:.2f})"
 
                                     if pval >= 0.001:
                                         effect = f"None (p={pval:.2f})"
@@ -445,7 +459,7 @@ class ReportGenerator:
                                 datasets.append(
                                     {
                                         "branch": branch_name,
-                                        "mean": mean,
+                                        "median": median,
                                         "uplift": uplift_str,
                                         "std": std,
                                         "effect": effect,
@@ -822,15 +836,27 @@ class ReportGenerator:
 
                 n_value = int(metric_data.get("n", 0))
                 n = f"{n_value:,}"
-                mean = "{0:.1f}".format(metric_data.get("mean", 0))
+                median = "{0:.1f}".format(metric_data.get("median", 0))
 
                 if branch_name != control_name:
                     branch_mean = metric_data.get("mean", 0)
-                    control_mean = self.data[control_name][segment][metric_type][
-                        metric
-                    ].get("mean", 0)
+
+                    # Check if the metric exists in the control branch for this segment
+                    if (
+                        control_name in self.data
+                        and segment in self.data[control_name]
+                        and metric_type in self.data[control_name][segment]
+                        and metric in self.data[control_name][segment][metric_type]
+                    ):
+                        control_mean = self.data[control_name][segment][metric_type][
+                            metric
+                        ].get("mean", 0)
+                    else:
+                        control_mean = 0
                     if control_mean != 0:
-                        uplift = (branch_mean - control_mean) / control_mean * 100.0
+                        uplift = (
+                            (branch_mean - control_mean) / control_mean * 100.0
+                        )
                         uplift = "{0:.1f}".format(uplift)
                     else:
                         uplift = "0.0"
@@ -846,10 +872,12 @@ class ReportGenerator:
                 se = "{0:.1f}".format(se)
 
                 std = "{0:.1f}".format(metric_data.get("std", 0))
+                mean = "{0:.1f}".format(metric_data.get("mean", 0))
 
                 dataset = {
                     "branch": branch_name,
                     "mean": mean,
+                    "median": median,
                     "uplift": uplift,
                     "n": n,
                     "se": se,

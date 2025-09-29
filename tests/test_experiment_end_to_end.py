@@ -193,7 +193,7 @@ class TestIntegrationWithArtificialData(unittest.TestCase):
 
         # Check for uplift values and effect sizes in summary tables
         self.assertIn(
-            "mean uplift", html_content, "Should have mean uplift column in summary"
+            "median uplift", html_content, "Should have median uplift column in summary"
         )
         self.assertIn(
             "effect size", html_content, "Should have effect size column in summary"

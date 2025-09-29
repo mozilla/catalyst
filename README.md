@@ -176,6 +176,38 @@ events:
         max: 20000
 ```
 
+### Advanced Configuration Options
+
+**Custom Conditions:**
+Add custom SQL conditions to filter your data:
+```yaml
+custom_conditions:
+  - "country_code = 'US'"
+  - "app_version >= '100.0'"
+```
+
+**Prerequisite CTEs:**
+Define reusable SQL CTEs for complex queries:
+```yaml
+prerequisite_ctes:
+  - name: "filtered_users"
+    query: "SELECT client_id FROM table WHERE condition = true"
+  - name: "cohort_data"
+    query: "SELECT * FROM other_table WHERE date >= '2024-01-01'"
+```
+
+**Sample Percentage:**
+Control data sampling for faster processing (only applies to histograms):
+```yaml
+sample_pct: 10  # Use 10% of available data
+```
+
+**Parallel Query Threads:**
+Control the number of parallel BigQuery threads:
+```yaml
+max_parallel_queries: 8  # Default is 4
+```
+
 ### Example Configs
 
 Available configuration files:

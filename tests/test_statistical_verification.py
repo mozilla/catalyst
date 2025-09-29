@@ -43,7 +43,7 @@ class TestStatisticalVerification(unittest.TestCase):
             "ignore",
             message="Precision loss occurred in moment calculation due to catastrophic cancellation.*",
             category=RuntimeWarning,
-            module="scipy.*"
+            module="scipy.*",
         )
 
         self.test_dir = tempfile.mkdtemp()

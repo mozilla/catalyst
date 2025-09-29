@@ -9,11 +9,14 @@
       <li class="sub-menu">
         <a href="javascript:void(0);"><i class="{{segment.icon}}"></i><span>{{segment.name}}</span><i class="arrow fa-solid fa-angle-right pull-right"></i></a>
         <ul>
-{% for histogram in segment.histograms %}
-          <li><a href="#{{segment.name}}-{{histogram}}">{{histogram}}</a></li>
+{% for metric in segment.numerical_metrics %}
+          <li><a href="#{{segment.name}}-{{metric}}">{{metric}}</a></li>
 {% endfor %}
-{% for metric in segment.pageload_metrics %}
-          <li><a href="#{{segment.name}}-{{metric}}">pageload event: {{metric}}</a></li>
+{% for metric in segment.categorical_metrics %}
+          <li><a href="#{{segment.name}}-{{metric}}">{{metric}}</a></li>
+{% endfor %}
+{% for metric in segment.scalar_metrics %}
+          <li><a href="#{{segment.name}}-{{metric}}">{{metric}}</a></li>
 {% endfor %}
         </ul>
       </li>
