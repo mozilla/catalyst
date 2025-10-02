@@ -198,15 +198,15 @@ def load_failures(failures_file):
 
 def append_failure(failures_file, slug, error, config_file):
   import traceback
-  
+
   # Load existing failures
   failures = load_failures(failures_file)
-  
+
   # Load and parse the config file contents
   config_contents = None
   if os.path.exists(config_file):
     with open(config_file, 'r') as f:
-      config_contents = json.load(f)
+      config_contents = yaml.safe_load(f)
 
   # Add new failure with details
   failures[slug] = {

@@ -82,9 +82,12 @@ def getResultsForExperiment(slug, dataDir, config, skipCache):
 
 def checkForLocalResults(resultsFile):
     if os.path.isfile(resultsFile):
-        with open(resultsFile, "r") as f:
-            results = json.load(f)
-            return results
+        try:
+            with open(resultsFile, "r") as f:
+                results = json.load(f)
+                return results
+        except json.JSONDecodeError:
+            return None
     return None
 
 

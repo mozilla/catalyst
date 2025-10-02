@@ -395,6 +395,10 @@ class TelemetryClient:
                 if (branch, segment) in invalid_combinations[histogram_key]:
                     continue
 
+            if histogram not in histograms:
+                print(f"  WARNING: Skipping {histogram} - no data available")
+                continue
+
             df = histograms[histogram]
 
             # Filter for the specific branch and segment
@@ -521,6 +525,10 @@ class TelemetryClient:
             if histogram_key in invalid_combinations:
                 if (branch, segment) in invalid_combinations[histogram_key]:
                     continue
+
+            if histogram not in histograms:
+                print(f"  WARNING: Skipping {histogram} - no data available")
+                continue
 
             df = histograms[histogram]
             if segment == "All":
