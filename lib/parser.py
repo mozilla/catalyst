@@ -183,10 +183,25 @@ def annotateHistograms(config: Dict[str, Any], probeIndex: Dict[str, Any]) -> No
         config["histograms"] = {}
         return
 
-    histograms = config["histograms"].copy()
+    histograms_input = config["histograms"]
+
+    if isinstance(histograms_input, list):
+        histogram_list = histograms_input
+        histogram_props = {}
+    elif isinstance(histograms_input, dict):
+        histogram_list = list(histograms_input.keys())
+        histogram_props = histograms_input
+    else:
+        histogram_list = []
+        histogram_props = {}
+
     config["histograms"] = {}
-    for i, hist in enumerate(histograms):
+    for i, hist in enumerate(histogram_list):
         config["histograms"][hist] = {}
+
+        if hist in histogram_props and isinstance(histogram_props[hist], dict):
+            config["histograms"][hist].update(histogram_props[hist])
+
         hist_name = hist.split(".")[-1]
 
         # Prioritize Glean probes for metrics that start with "metrics."
@@ -214,6 +229,7 @@ def annotateHistograms(config: Dict[str, Any], probeIndex: Dict[str, Any]) -> No
                 "custom_distribution",
             ]:
                 config["histograms"][hist]["kind"] = "numerical"
+                config["histograms"][hist]["distribution_type"] = schema["type"]
             else:
                 type = schema["type"]
                 print(f"ERROR: Type {type} for {hist_name} not currently supported.")
@@ -271,6 +287,7 @@ def annotateHistograms(config: Dict[str, Any], probeIndex: Dict[str, Any]) -> No
                 "custom_distribution",
             ]:
                 config["histograms"][hist]["kind"] = "numerical"
+                config["histograms"][hist]["distribution_type"] = schema["type"]
             else:
                 type = schema["type"]
                 print(f"ERROR: Type {type} for {hist_name} not currently supported.")

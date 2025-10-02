@@ -907,6 +907,9 @@ class TelemetryClient:
             "available_on_android": self.config["histograms"][histogram][
                 "available_on_android"
             ],
+            "distribution_type": self.config["histograms"][histogram].get(
+                "distribution_type", "timing_distribution"
+            ),
         }
         query = t.render(context)
         query = clean_sql_query(query)
@@ -1087,6 +1090,9 @@ class TelemetryClient:
             "end_date": branches[0]["endDate"] if use_shared_dates else None,
             "channel": branches[0]["channel"] if use_shared_dates else None,
             "sample_pct": self.config.get("sample_pct"),
+            "distribution_type": self.config["histograms"][histogram].get(
+                "distribution_type", "timing_distribution"
+            ),
         }
 
         query = t.render(context)

@@ -1,11 +1,15 @@
 {% autoescape off %}
-with 
+with
 {% if available_on_desktop == True %}
 desktop_data as (
-    SELECT 
+    SELECT
         normalized_os as segment,
         mozfun.map.get_key(ping_info.experiments, "{{slug}}").branch as branch,
+        {% if distribution_type == "timing_distribution" %}
         CAST(key as INT64)/1000000 AS bucket,
+        {% else %}
+        CAST(key as INT64) AS bucket,
+        {% endif %}
         value as count
     FROM `mozdata.firefox_desktop.metrics` as d
       CROSS JOIN UNNEST({{histogram}}.values)
@@ -31,10 +35,14 @@ desktop_data as (
 {% endif %}
 {% if available_on_android == True %}
 android_data as (
-    SELECT 
+    SELECT
         normalized_os as segment,
         mozfun.map.get_key(ping_info.experiments, "{{slug}}").branch as branch,
+        {% if distribution_type == "timing_distribution" %}
         CAST(key as INT64)/1000000 AS bucket,
+        {% else %}
+        CAST(key as INT64) AS bucket,
+        {% endif %}
         value as count
     FROM `mozdata.fenix.metrics` as f
       CROSS JOIN UNNEST({{histogram}}.values)
@@ -60,10 +68,14 @@ android_data as (
 {% if include_non_enrolled_branch == True %}
 {% if available_on_desktop == True %}
 ,desktop_data_non_enrolled as (
-    SELECT 
+    SELECT
         normalized_os as segment,
         "non-enrolled" as branch,
+        {% if distribution_type == "timing_distribution" %}
         CAST(key as INT64)/1000000 AS bucket,
+        {% else %}
+        CAST(key as INT64) AS bucket,
+        {% endif %}
         value as count
     FROM `mozdata.firefox_desktop.metrics` as d
       CROSS JOIN UNNEST({{histogram}}.values)
@@ -88,10 +100,14 @@ android_data as (
 {% endif %}
 {% if available_on_android == True %}
 android_data_non_enrolled as (
-    SELECT 
+    SELECT
         normalized_os as segment,
         "non-enrolled" as branch,
+        {% if distribution_type == "timing_distribution" %}
         CAST(key as INT64)/1000000 AS bucket,
+        {% else %}
+        CAST(key as INT64) AS bucket,
+        {% endif %}
         value as count
     FROM `mozdata.fenix.metrics` as f
       CROSS JOIN UNNEST({{histogram}}.values)

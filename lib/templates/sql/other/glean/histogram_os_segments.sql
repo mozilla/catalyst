@@ -13,7 +13,11 @@ WITH
     SELECT
         normalized_os as segment,
         "{{branch.name}}" as branch,
+        {% if distribution_type == "timing_distribution" %}
         CAST(key as INT64)/1000000 AS bucket,
+        {% else %}
+        CAST(key as INT64) AS bucket,
+        {% endif %}
         value as count
     FROM `mozdata.firefox_desktop.metrics` as m
         CROSS JOIN UNNEST({{histogram}}.values)
@@ -45,7 +49,11 @@ WITH
     SELECT
         normalized_os as segment,
         "{{branch.name}}" as branch,
+        {% if distribution_type == "timing_distribution" %}
         CAST(key as INT64)/1000000 AS bucket,
+        {% else %}
+        CAST(key as INT64) AS bucket,
+        {% endif %}
         value as count
     FROM `mozdata.fenix.metrics` as f
         CROSS JOIN UNNEST({{histogram}}.values)

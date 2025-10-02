@@ -442,19 +442,37 @@ class ReportGenerator:
                                     effect = "No test"
                                     effect_meaning = "None"
 
-                                # Determine color
+                                full_hist_name = None
+                                for hist_key in self.data.get("histograms", {}):
+                                    if hist_key.endswith(metric):
+                                        full_hist_name = hist_key
+                                        break
+
+                                higher_is_better = False
+                                if full_hist_name and full_hist_name in self.data["histograms"]:
+                                    higher_is_better = self.data["histograms"][full_hist_name].get(
+                                        "higher_is_better", False
+                                    )
                                 if (
                                     effect_meaning == "None"
                                     or effect_meaning == "Small"
                                 ):
                                     color = "font-weight: normal"
                                 else:
-                                    if uplift >= 1.5:
-                                        color = "font-weight: bold; color: red"
-                                    elif uplift <= -1.5:
-                                        color = "font-weight: bold; color: green"
+                                    if higher_is_better:
+                                        if uplift >= 1.5:
+                                            color = "font-weight: bold; color: green"
+                                        elif uplift <= -1.5:
+                                            color = "font-weight: bold; color: red"
+                                        else:
+                                            color = "font-weight: normal"
                                     else:
-                                        color = "font-weight: normal"
+                                        if uplift >= 1.5:
+                                            color = "font-weight: bold; color: red"
+                                        elif uplift <= -1.5:
+                                            color = "font-weight: bold; color: green"
+                                        else:
+                                            color = "font-weight: normal"
 
                                 datasets.append(
                                     {

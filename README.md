@@ -135,11 +135,31 @@ events:
 ### Key Configuration Fields
 
 - **slug**: Experiment identifier
-- **segments**: Target platforms/segments  
-- **histograms**: List of histogram metrics to analyze
+- **segments**: Target platforms/segments
+- **histograms**: List of histogram metrics to analyze (see Histogram Configuration below)
 - **events**: Event metrics configuration (replaces legacy pageload_event_metrics)
   - **crash**: Simple crash event tracking
   - **pageload**: Pageload event metrics with max values (min is always 0)
+
+### Histogram Configuration
+
+Histograms can be specified as a simple list or as a dictionary with additional properties:
+
+**Simple list format:**
+```yaml
+histograms:
+  - metrics.timing_distribution.performance_pageload_fcp
+  - metrics.custom_distribution.networking_http_3_upload_throughput
+```
+
+**Dictionary format with properties:**
+```yaml
+histograms:
+  metrics.custom_distribution.networking_http_3_upload_throughput:
+    higher_is_better: true
+  metrics.timing_distribution.performance_pageload_fcp:
+    higher_is_better: false  # default
+```
 
 ### Event Configuration Options
 
