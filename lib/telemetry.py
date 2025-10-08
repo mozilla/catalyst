@@ -125,13 +125,58 @@ def config_has_custom_segments(config):
 
 
 class TelemetryClient:
-    def __init__(self, dataDir, config, skipCache):
+    """
+    Client for fetching and processing telemetry data from BigQuery.
+
+    This class handles SQL query generation, BigQuery execution,
+    and local caching of results.
+    """
+
+    def __init__(self, dataDir: str, config: dict, skipCache: bool = False):
         self.client = bigquery.Client()
         self.config = config
         self.dataDir = dataDir
         self.skipCache = skipCache
         self.queries = []
+
+        # Configure parallel query execution
+        # Default to 4 threads - good balance between performance and resource usage
         self.max_workers = config.get("max_parallel_queries", 4)
+
+        # Ensure data directory exists
+        os.makedirs(dataDir, exist_ok=True)
+
+        # Check authentication early to provide clear error message
+        self._check_authentication()
+
+    def _check_authentication(self):
+        """
+        Check if BigQuery authentication is properly configured.
+
+        Raises:
+            SystemExit: If authentication is not properly configured
+        """
+        try:
+            # Try a simple query to test authentication
+            # Use a minimal query that should work if authenticated
+            query = "SELECT 1 as test_auth LIMIT 1"
+            job = self.client.query(query)
+            # Don't wait for results, just check if the job was created
+            job.result(max_results=1)
+        except Exception as e:
+            error_message = str(e).lower()
+            if "reauthentication is needed" in error_message or "authentication" in error_message:
+                print("\n❌ BigQuery Authentication Error")
+                print("Your Google Cloud authentication has expired or is not configured.")
+                print("\nTo fix this, please run:")
+                print("  gcloud auth application-default login")
+                print("\nThen try running this command again.")
+                sys.exit(1)
+            else:
+                # Some other error - let it propagate normally
+                print(f"\n❌ Error testing BigQuery connection: {e}")
+                print("Please check your Google Cloud configuration.")
+                sys.exit(1)
 
     def _calculateSamplePct(self, histogram):
         """Calculate sampling percentage or LIMIT to cap queries at target entries."""

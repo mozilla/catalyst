@@ -297,27 +297,28 @@ class TestTelemetry(unittest.TestCase):
             client = TelemetryClient(temp_dir, config, skipCache=False)
             self.assertIsNotNone(client)
 
-    # Authentication check was removed from TelemetryClient.__init__
-    # The client now fails at query time rather than init time
-    # @patch("lib.telemetry.sys.exit")
-    # @patch("lib.telemetry.bigquery.Client")
-    # def test_telemetry_client_authentication_check_failure(self, mock_bigquery_client, mock_exit):
-    #     """Test TelemetryClient authentication check with auth failure."""
-    #     mock_client = MagicMock()
-    #     mock_client.query.side_effect = Exception("Reauthentication is needed. Please run `gcloud auth application-default login` to reauthenticate.")
-    #     mock_bigquery_client.return_value = mock_client
+    @patch("lib.telemetry.sys.exit")
+    @patch("lib.telemetry.bigquery.Client")
+    def test_telemetry_client_authentication_check_failure(self, mock_bigquery_client, mock_exit):
+        """Test TelemetryClient authentication check with auth failure."""
+        mock_client = MagicMock()
+        mock_job = MagicMock()
+        mock_job.result.side_effect = Exception("Reauthentication is needed. Please run `gcloud auth application-default login` to reauthenticate.")
+        mock_client.query.return_value = mock_job
+        mock_bigquery_client.return_value = mock_client
 
-    #     config = {
-    #         "slug": "test-experiment",
-    #         "histograms": [],
-    #         "pageload_event_metrics": [],
-    #         "crash_event_metrics": [],
-    #     }
+        config = {
+            "slug": "test-experiment",
+            "histograms": {},
+            "pageload_event_metrics": {},
+            "crash_event_metrics": {},
+            "max_parallel_queries": 4,
+        }
 
-    #     with tempfile.TemporaryDirectory() as temp_dir:
-    #         # This should call sys.exit(1)
-    #         TelemetryClient(temp_dir, config, skipCache=False)
-    #         mock_exit.assert_called_once_with(1)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # This should call sys.exit(1)
+            TelemetryClient(temp_dir, config, skipCache=False)
+            mock_exit.assert_called_once_with(1)
 
 
 if __name__ == "__main__":
