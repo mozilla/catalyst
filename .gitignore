@@ -8,7 +8,6 @@ claude/
 *~
 *.swp
 *.DS_Store
-isp_blacklist.txt
 
 # Python cache and bytecode
 __pycache__/

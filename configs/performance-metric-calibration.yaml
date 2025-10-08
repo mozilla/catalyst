@@ -6,7 +6,6 @@ histograms:
 - payload.processes.content.histograms.perf_first_contentful_paint_ms
 - payload.processes.content.histograms.perf_first_contentful_paint_from_responsestart_ms
 - payload.processes.content.histograms.js_pageload_execution_ms
-isp_blacklist: isp_blacklist.txt
 segments:
 - All
 - Windows
