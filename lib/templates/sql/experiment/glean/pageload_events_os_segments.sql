@@ -11,7 +11,8 @@ CROSS JOIN
 WHERE
   normalized_channel = "{{channel}}"
   AND DATE(submission_timestamp) >= DATE('{{startDate}}')
-  AND DATE(submission_timestamp) <= DATE('{{endDate}}')  
+  AND DATE(submission_timestamp) <= DATE('{{endDate}}')
+  {% if single_os_filter %}AND normalized_os = "{{single_os_filter}}"{% endif %}
   AND mozfun.map.get_key(ping_info.experiments, "{{slug}}").branch is not null
   {% if pageload_event_filter %}
   AND {{pageload_event_filter}}
@@ -32,6 +33,7 @@ WHERE
   normalized_channel = "{{channel}}"
   AND DATE(submission_timestamp) >= DATE('{{startDate}}')
   AND DATE(submission_timestamp) <= DATE('{{endDate}}')
+  {% if single_os_filter %}AND normalized_os = "{{single_os_filter}}"{% endif %}
   AND ARRAY_LENGTH(ping_info.experiments) = 0
   {% if pageload_event_filter %}
   AND {{pageload_event_filter}}
@@ -50,7 +52,8 @@ CROSS JOIN
 WHERE
   normalized_channel = "{{channel}}"
   AND DATE(submission_timestamp) >= DATE('{{startDate}}')
-  AND DATE(submission_timestamp) <= DATE('{{endDate}}')  
+  AND DATE(submission_timestamp) <= DATE('{{endDate}}')
+  {% if single_os_filter %}AND normalized_os = "{{single_os_filter}}"{% endif %}
   AND mozfun.map.get_key(ping_info.experiments, "{{slug}}").branch is not null
   {% if pageload_event_filter %}
   AND {{pageload_event_filter}}
@@ -71,6 +74,7 @@ WHERE
   normalized_channel = "{{channel}}"
   AND DATE(submission_timestamp) >= DATE('{{startDate}}')
   AND DATE(submission_timestamp) <= DATE('{{endDate}}')
+  {% if single_os_filter %}AND normalized_os = "{{single_os_filter}}"{% endif %}
   AND ARRAY_LENGTH(ping_info.experiments) = 0
   {% if pageload_event_filter %}
   AND {{pageload_event_filter}}

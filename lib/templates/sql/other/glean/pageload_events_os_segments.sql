@@ -14,6 +14,7 @@ eventdata_{{branch.name}}_desktop as (
         AND DATE(submission_timestamp) <= DATE('{{branch.endDate}}')
         AND normalized_channel = "{{branch.channel}}"
         AND normalized_app_name = "Firefox"
+        {% if single_os_filter %}AND normalized_os = "{{single_os_filter}}"{% endif %}
         {{branch.ver_condition}}
         {{branch.arch_condition}}
 {% for condition in branch.glean_conditions %}
@@ -35,6 +36,7 @@ eventdata_{{branch.name}}_android as (
         DATE(submission_timestamp) >= DATE('{{branch.startDate}}')
         AND DATE(submission_timestamp) <= DATE('{{branch.endDate}}')
         AND normalized_channel = "{{branch.channel}}"
+        {% if single_os_filter %}AND normalized_os = "{{single_os_filter}}"{% endif %}
         {{branch.ver_condition}}
         {{branch.arch_condition}}
 {% for condition in branch.glean_conditions %}

@@ -18,6 +18,7 @@ desktop_data as (
       AND DATE(submission_timestamp) <= DATE('{{endDate}}')
       AND normalized_channel = "{{channel}}"
       AND normalized_app_name = "Firefox"
+      {% if single_os_filter %}AND normalized_os = "{{single_os_filter}}"{% endif %}
       AND d.{{histogram}} is not null
       AND ARRAY_LENGTH(ping_info.experiments) > 0
       AND mozfun.map.get_key(ping_info.experiments, "{{slug}}").branch is not null
@@ -50,6 +51,7 @@ android_data as (
       DATE(submission_timestamp) >= DATE('{{startDate}}')
       AND DATE(submission_timestamp) <= DATE('{{endDate}}')
       AND normalized_channel = "{{channel}}"
+      {% if single_os_filter %}AND normalized_os = "{{single_os_filter}}"{% endif %}
       AND f.{{histogram}} is not null
       AND ARRAY_LENGTH(ping_info.experiments) > 0
       AND mozfun.map.get_key(ping_info.experiments, "{{slug}}").branch is not null
@@ -84,6 +86,7 @@ android_data as (
       AND DATE(submission_timestamp) <= DATE('{{endDate}}')
       AND normalized_channel = "{{channel}}"
       AND normalized_app_name = "Firefox"
+      {% if single_os_filter %}AND normalized_os = "{{single_os_filter}}"{% endif %}
       AND d.{{histogram}} is not null
       AND ARRAY_LENGTH(ping_info.experiments) = 0
 ),
@@ -115,6 +118,7 @@ android_data_non_enrolled as (
       DATE(submission_timestamp) >= DATE('{{startDate}}')
       AND DATE(submission_timestamp) <= DATE('{{endDate}}')
       AND normalized_channel = "{{channel}}"
+      {% if single_os_filter %}AND normalized_os = "{{single_os_filter}}"{% endif %}
       AND f.{{histogram}} is not null
       AND ARRAY_LENGTH(ping_info.experiments) = 0
 )

@@ -33,6 +33,7 @@ WITH
         AND normalized_channel = "{{branch.channel}}"
         {% endif %}
         AND normalized_app_name = "Firefox"
+        {% if single_os_filter %}AND normalized_os = "{{single_os_filter}}"{% endif %}
         {% if sample_threshold %}AND MOD(ABS(FARM_FINGERPRINT(document_id)), {{sample_modulus}}) <= {{sample_threshold}}{% endif %}
         AND m.{{histogram}} is not null
         {% if branch.custom_condition %}
@@ -70,6 +71,7 @@ WITH
         AND DATE(submission_timestamp) <= DATE('{{branch.endDate}}')
         AND normalized_channel = "{{branch.channel}}"
         {% endif %}
+        {% if single_os_filter %}AND normalized_os = "{{single_os_filter}}"{% endif %}
         {% if sample_threshold %}AND MOD(ABS(FARM_FINGERPRINT(document_id)), {{sample_modulus}}) <= {{sample_threshold}}{% endif %}
         AND f.{{histogram}} is not null
         {% if branch.custom_condition_android %}

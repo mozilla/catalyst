@@ -9,7 +9,8 @@ FROM
 WHERE
   normalized_channel = "{{channel}}"
   AND DATE(submission_timestamp) >= DATE('{{startDate}}')
-  AND DATE(submission_timestamp) <= DATE('{{endDate}}')  
+  AND DATE(submission_timestamp) <= DATE('{{endDate}}')
+  {% if single_os_filter %}AND normalized_os = "{{single_os_filter}}"{% endif %}
   AND mozfun.map.get_key(ping_info.experiments, "{{slug}}").branch is not null
 GROUP BY
   segment, branch
@@ -27,6 +28,7 @@ WHERE
   normalized_channel = "{{channel}}"
   AND DATE(submission_timestamp) >= DATE('{{startDate}}')
   AND DATE(submission_timestamp) <= DATE('{{endDate}}')
+  {% if single_os_filter %}AND normalized_os = "{{single_os_filter}}"{% endif %}
   AND ARRAY_LENGTH(ping_info.experiments) = 0
 GROUP BY
   segment, branch
@@ -42,7 +44,8 @@ FROM
 WHERE
   normalized_channel = "{{channel}}"
   AND DATE(submission_timestamp) >= DATE('{{startDate}}')
-  AND DATE(submission_timestamp) <= DATE('{{endDate}}')  
+  AND DATE(submission_timestamp) <= DATE('{{endDate}}')
+  {% if single_os_filter %}AND normalized_os = "{{single_os_filter}}"{% endif %}
   AND mozfun.map.get_key(ping_info.experiments, "{{slug}}").branch is not null
 GROUP BY
   segment, branch
@@ -60,6 +63,7 @@ WHERE
   normalized_channel = "{{channel}}"
   AND DATE(submission_timestamp) >= DATE('{{startDate}}')
   AND DATE(submission_timestamp) <= DATE('{{endDate}}')
+  {% if single_os_filter %}AND normalized_os = "{{single_os_filter}}"{% endif %}
   AND ARRAY_LENGTH(ping_info.experiments) = 0
 GROUP BY
   segment, branch

@@ -178,6 +178,21 @@ class TelemetryClient:
                 print("Please check your Google Cloud configuration.")
                 sys.exit(1)
 
+    def _get_single_os_filter(self):
+        """
+        Check if there's a single OS segment configured to optimize queries.
+
+        Returns:
+            str or None: The OS name if a single OS segment is configured, None otherwise
+        """
+        segments = self.config.get("segments", [])
+        if len(segments) == 1:
+            segment = segments[0]
+            # Only add filter for actual OS values, not "All"
+            if segment in ["Mac", "Windows", "Linux", "Android"]:
+                return segment
+        return None
+
     def _calculateSamplePct(self, histogram):
         """Calculate sampling percentage or LIMIT to cap queries at target entries."""
         sample_pct = self.config.get("sample_pct")
@@ -688,6 +703,7 @@ class TelemetryClient:
             "metric": metric,
             "branches": branches,
             "pageload_event_filter": self.config.get("pageload_event_filter"),
+            "single_os_filter": self._get_single_os_filter(),
         }
 
         query = t.render(context)
@@ -720,6 +736,7 @@ class TelemetryClient:
             "metric": metric,
             "blacklist": isp_blacklist,
             "pageload_event_filter": self.config.get("pageload_event_filter"),
+            "single_os_filter": self._get_single_os_filter(),
         }
         query = t.render(context)
         # Remove empty lines before returning
@@ -816,6 +833,7 @@ class TelemetryClient:
                 "available_on_android"
             ],
             "blacklist": isp_blacklist,
+            "single_os_filter": self._get_single_os_filter(),
         }
         query = t.render(context)
         # Remove empty lines before returning
@@ -960,6 +978,7 @@ class TelemetryClient:
             "sample_pct": sample_pct,
             "sample_threshold": sample_threshold,
             "sample_modulus": sample_modulus or 100,  # Default to 100 for old templates
+            "single_os_filter": self._get_single_os_filter(),
         }
 
         query = t.render(context)
@@ -1163,6 +1182,7 @@ class TelemetryClient:
 
         context = {
             "branches": branches,
+            "single_os_filter": self._get_single_os_filter(),
         }
 
         query = t.render(context)
@@ -1179,6 +1199,7 @@ class TelemetryClient:
             "channel": self.config["channel"],
             "startDate": self.config["startDate"],
             "endDate": self.config["endDate"],
+            "single_os_filter": self._get_single_os_filter(),
         }
         query = t.render(context)
         query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
@@ -1335,6 +1356,7 @@ class TelemetryClient:
             "available_on_android": self.config["histograms"][histogram][
                 "available_on_android"
             ],
+            "single_os_filter": self._get_single_os_filter(),
         }
 
         query = t.render(context)
