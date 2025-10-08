@@ -815,6 +815,9 @@ class TelemetryClient:
             "available_on_android": self.config["histograms"][histogram][
                 "available_on_android"
             ],
+            "distribution_type": self.config["histograms"][histogram].get(
+                "distribution_type"
+            ),
             "single_os_filter": self._get_single_os_filter(),
         }
         query = t.render(context)
@@ -949,6 +952,9 @@ class TelemetryClient:
             "available_on_android": self.config["histograms"][histogram][
                 "available_on_android"
             ],
+            "distribution_type": self.config["histograms"][histogram].get(
+                "distribution_type"
+            ),
             "needs_desktop": needs_desktop,
             "needs_android": needs_android,
             "branches": branches,
@@ -1338,6 +1344,9 @@ class TelemetryClient:
             "available_on_android": self.config["histograms"][histogram][
                 "available_on_android"
             ],
+            "distribution_type": self.config["histograms"][histogram].get(
+                "distribution_type"
+            ),
             "single_os_filter": self._get_single_os_filter(),
         }
 
