@@ -462,7 +462,7 @@ performance_baseline AS (
                     "custom_condition": "test_column = 'control_condition'",
                 },
             ],
-            "segments": ["Windows", "Mac"],
+            "segments": ["Windows", "Mac", "Android"],
             "histograms": ["metrics.timing_distribution.performance_pageload_fcp"],
         }
 

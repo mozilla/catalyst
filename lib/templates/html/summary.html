@@ -4,7 +4,7 @@
 
   <table border="1" cellspacing="0" cellpadding="0" class="desc-table">
     <tbody>
-      <tr> 
+      <tr>
         <td class="desc-header">
           {% if is_experiment == True %}
           Experiment
@@ -13,7 +13,11 @@
           {% endif %}
         </td>
         <td colspan={{branchlen}} style="border-bottom-style: solid;">
+          {% if is_experiment == True %}
           <a href="https://experimenter.services.mozilla.com/nimbus/{{slug}}" target="_blank" rel="noopener noreferrer">{{slug}}</a>
+          {% else %}
+          {{slug}}
+          {% endif %}
         </td>
       </tr>
         {% if is_experiment == True %}

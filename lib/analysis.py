@@ -428,7 +428,12 @@ class DataAnalyzer:
             result_location["desc"] = config.get("desc", f"Total {metric_name}")
 
             # Apply unified scalar analysis
-            scalar_value = data.get("crash_count", data.get("count", 0))
+            # Handle both dictionary format and raw scalar values
+            if isinstance(data, dict):
+                scalar_value = data.get("crash_count", data.get("count", 0))
+            else:
+                # For crash events, data is stored as a raw integer
+                scalar_value = data
             result_location["count"] = scalar_value
             result_location["n"] = 1
 

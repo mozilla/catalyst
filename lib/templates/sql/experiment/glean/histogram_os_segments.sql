@@ -12,13 +12,13 @@ desktop_data as (
         {% endif %}
         value as count
     FROM `mozdata.firefox_desktop.metrics` as d
-      CROSS JOIN UNNEST({{histogram}}.values)
+      CROSS JOIN UNNEST(d.{{histogram}}.values)
     WHERE
       DATE(submission_timestamp) >= DATE('{{startDate}}')
       AND DATE(submission_timestamp) <= DATE('{{endDate}}')
       AND normalized_channel = "{{channel}}"
       AND normalized_app_name = "Firefox"
-      AND {{histogram}} is not null
+      AND d.{{histogram}} is not null
       AND ARRAY_LENGTH(ping_info.experiments) > 0
       AND mozfun.map.get_key(ping_info.experiments, "{{slug}}").branch is not null
 ),
@@ -45,12 +45,12 @@ android_data as (
         {% endif %}
         value as count
     FROM `mozdata.fenix.metrics` as f
-      CROSS JOIN UNNEST({{histogram}}.values)
+      CROSS JOIN UNNEST(f.{{histogram}}.values)
     WHERE
       DATE(submission_timestamp) >= DATE('{{startDate}}')
       AND DATE(submission_timestamp) <= DATE('{{endDate}}')
       AND normalized_channel = "{{channel}}"
-      AND {{histogram}} is not null
+      AND f.{{histogram}} is not null
       AND ARRAY_LENGTH(ping_info.experiments) > 0
       AND mozfun.map.get_key(ping_info.experiments, "{{slug}}").branch is not null
 )
@@ -78,13 +78,13 @@ android_data as (
         {% endif %}
         value as count
     FROM `mozdata.firefox_desktop.metrics` as d
-      CROSS JOIN UNNEST({{histogram}}.values)
+      CROSS JOIN UNNEST(d.{{histogram}}.values)
     WHERE
       DATE(submission_timestamp) >= DATE('{{startDate}}')
       AND DATE(submission_timestamp) <= DATE('{{endDate}}')
       AND normalized_channel = "{{channel}}"
       AND normalized_app_name = "Firefox"
-      AND {{histogram}} is not null
+      AND d.{{histogram}} is not null
       AND ARRAY_LENGTH(ping_info.experiments) = 0
 ),
 {% else %}
@@ -110,12 +110,12 @@ android_data_non_enrolled as (
         {% endif %}
         value as count
     FROM `mozdata.fenix.metrics` as f
-      CROSS JOIN UNNEST({{histogram}}.values)
+      CROSS JOIN UNNEST(f.{{histogram}}.values)
     WHERE
       DATE(submission_timestamp) >= DATE('{{startDate}}')
       AND DATE(submission_timestamp) <= DATE('{{endDate}}')
       AND normalized_channel = "{{channel}}"
-      AND {{histogram}} is not null
+      AND f.{{histogram}} is not null
       AND ARRAY_LENGTH(ping_info.experiments) = 0
 )
 {% else %}

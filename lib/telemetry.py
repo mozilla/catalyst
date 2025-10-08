@@ -1,79 +1,62 @@
-"""
-BigQuery telemetry data analysis module.
-
-This module provides functionality to generate BigQuery SQL queries,
-execute them, and process histogram and pageload event metrics data.
-"""
-
 import os
 import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, List, Any, Optional
 import pandas as pd
 from google.cloud import bigquery
 from django.template.loader import get_template
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 
 
-def invalidDataSet(
-    df: pd.DataFrame,
-    histogram: str,
-    branches: List[Dict[str, Any]],
-    segments: List[str],
-    min_sample_size: int = 1000,
-) -> bool:
+def clean_sql_query(query):
     """
-    Check if entire dataset is invalid (completely empty).
+    Clean up SQL query string by removing empty lines and normalizing whitespace.
 
     Args:
-        df: DataFrame containing telemetry data
-        histogram: Name of the histogram being validated
-        branches: List of branch configurations
-        segments: List of segment names
-        min_sample_size: Minimum required sample size per branch/segment
+        query (str): The SQL query string to clean
 
     Returns:
-        True if dataset is completely invalid (empty), False otherwise
+        str: The cleaned SQL query string
     """
+    if not query or not query.strip():
+        return ""
+
+    # Split into lines, strip whitespace from each line, and filter out empty lines
+    lines = [line.strip() for line in query.split("\n")]
+    non_empty_lines = [line for line in lines if line]
+
+    # Join with single newlines
+    return "\n".join(non_empty_lines)
+
+
+# Remove any histograms that have empty datasets in
+# either a branch, or branch segment.
+def invalidDataSet(df, histogram, branches, segments):
     if df.empty:
         print(f"Empty dataset found, removing: {histogram}.")
         return True
 
-    # Check if all branches are empty
-    all_branches_empty = True
     for branch in branches:
         branch_name = branch["name"]
         branch_df = df[df["branch"] == branch_name]
-        if not branch_df.empty:
-            all_branches_empty = False
-            break
-
-    if all_branches_empty:
-        print(f"All branches empty, removing: {histogram}.")
-        return True
+        if branch_df.empty:
+            print(
+                f"Empty dataset found for branch={branch_name}, removing: {histogram}."
+            )
+            return True
+        for segment in segments:
+            if segment == "All":
+                continue
+            branch_segment_df = branch_df[branch_df["segment"] == segment]
+            if branch_segment_df.empty:
+                print(
+                    f"Empty dataset found for segment={segment}, removing: {histogram}."
+                )
+                return True
 
     return False
 
 
-def getInvalidBranchSegments(
-    df: pd.DataFrame,
-    histogram: str,
-    branches: List[Dict[str, Any]],
-    segments: List[str],
-    min_sample_size: int = 1000,
-) -> List[tuple]:
-    """
-    Identify which specific branch/segment combinations have invalid data.
-
-    Args:
-        df: DataFrame containing telemetry data
-        histogram: Name of the histogram being validated
-        branches: List of branch configurations
-        segments: List of segment names
-        min_sample_size: Minimum required sample size per branch/segment
-
-    Returns:
-        List of (branch_name, segment) tuples that should be excluded
-    """
+def getInvalidBranchSegments(df, histogram, branches, segments, min_sample_size=1000):
     invalid_combinations = []
 
     for branch in branches:
@@ -81,7 +64,6 @@ def getInvalidBranchSegments(
         branch_df = df[df["branch"] == branch_name]
 
         if branch_df.empty:
-            # Entire branch is empty - mark all segments as invalid
             for segment in segments:
                 if segment != "All":
                     invalid_combinations.append((branch_name, segment))
@@ -100,7 +82,6 @@ def getInvalidBranchSegments(
                 invalid_combinations.append((branch_name, segment))
                 continue
 
-            # Check minimum sample size for histograms and pageload events
             if "counts" in branch_segment_df.columns:
                 total_samples = branch_segment_df["counts"].sum()
                 if total_samples < min_sample_size:
@@ -109,21 +90,11 @@ def getInvalidBranchSegments(
                         f"insufficient sample size (found {total_samples}, need {min_sample_size})"
                     )
                     invalid_combinations.append((branch_name, segment))
-            # For crash events, we don't enforce minimum sample size since 0 crashes is meaningful
 
     return invalid_combinations
 
 
-def segments_are_all_OS(segments: List[str]) -> bool:
-    """
-    Check if all segments are OS-based (allows for faster queries).
-
-    Args:
-        segments: List of segment names to validate
-
-    Returns:
-        True if all segments are OS-based, False otherwise
-    """
+def segments_are_all_OS(segments):
     os_segments = set(["Windows", "All", "Linux", "Mac", "Android"])
     for segment in segments:
         if segment not in os_segments:
@@ -131,405 +102,292 @@ def segments_are_all_OS(segments: List[str]) -> bool:
     return True
 
 
-def config_has_custom_branches(config: Dict[str, Any]) -> bool:
-    """
-    Check if the configuration uses custom branch conditions.
-
-    Args:
-        config: Configuration dictionary
-
-    Returns:
-        True if branches have custom conditions, False otherwise
-    """
-    return config.get("has_custom_branches", False)
+def config_has_custom_branches(config):
+    """Check if config has custom branch conditions."""
+    if config.get("has_custom_branches", False):
+        return True
+    if "branches" in config:
+        for branch in config["branches"]:
+            if "custom_condition" in branch:
+                return True
+    return False
 
 
-def config_has_custom_segments(config: Dict[str, Any]) -> bool:
-    """
-    Check if the configuration uses custom segments instead of OS segments.
-
-    Args:
-        config: Configuration dictionary
-
-    Returns:
-        True if custom segments are defined, False otherwise
-    """
-    return "custom_segments_info" in config
-
-
-def clean_sql_query(query: str) -> str:
-    """
-    Clean SQL query by removing empty lines.
-
-    Args:
-        query: Raw SQL query string
-
-    Returns:
-        Cleaned SQL query with empty lines removed
-    """
-    return "".join([s for s in query.strip().splitlines(True) if s.strip()])
+def config_has_custom_segments(config):
+    """Check if config has custom segment conditions."""
+    if "custom_segments_info" in config:
+        return True
+    if "segments" in config:
+        for segment in config["segments"]:
+            if isinstance(segment, dict) and "condition" in segment:
+                return True
+    return False
 
 
 class TelemetryClient:
-    """
-    BigQuery client for telemetry data analysis.
-
-    This class handles SQL query generation, BigQuery execution,
-    and local caching of results.
-    """
-
-    def __init__(self, dataDir: str, config: Dict[str, Any], skipCache: bool = False):
+    def __init__(self, dataDir, config, skipCache):
         self.client = bigquery.Client()
         self.config = config
         self.dataDir = dataDir
         self.skipCache = skipCache
-        self.queries: List[Dict[str, str]] = []
-
-        # Configure parallel query execution
-        # Default to 4 threads - good balance between performance and resource usage
+        self.queries = []
         self.max_workers = config.get("max_parallel_queries", 4)
 
-        # Ensure data directory exists
-        os.makedirs(dataDir, exist_ok=True)
+    def _calculateSamplePct(self, histogram):
+        """Calculate sampling percentage or LIMIT to cap queries at target entries."""
+        sample_pct = self.config.get("sample_pct")
 
-        # Check authentication early to provide clear error message
-        self._check_authentication()
+        # Handle auto sampling
+        if sample_pct == "auto":
+            return self._performAutoSampling(histogram)
 
-    def _check_authentication(self):
-        """
-        Check if BigQuery authentication is properly configured.
+        # If manual sampling is set, use it
+        if sample_pct:
+            return sample_pct
 
-        Raises:
-            SystemExit: If authentication is not properly configured
-        """
-        try:
-            # Try a simple query to test authentication
-            # Use a minimal query that should work if authenticated
-            query = "SELECT 1 as test_auth LIMIT 1"
-            job = self.client.query(query)
-            # Don't wait for results, just check if the job was created
-            job.result(max_results=1)
-        except Exception as e:
-            error_message = str(e).lower()
-            if "reauthentication is needed" in error_message or "authentication" in error_message:
-                print("\n❌ BigQuery Authentication Error")
-                print("Your Google Cloud authentication has expired or is not configured.")
-                print("\nTo fix this, please run:")
-                print("  gcloud auth application-default login")
-                print("\nThis will open a browser window to authenticate with your Google account.")
-                print("After authentication, try running the command again.\n")
-                sys.exit(1)
-            else:
-                # Re-raise other exceptions that aren't authentication related
-                raise e
+        # Check for per-metric sampling
+        metric_sampling = self.config.get("sample_pct_by_metric", {})
+        metric_name = histogram.split(".")[-1]  # Extract metric name
+        if metric_name in metric_sampling:
+            return metric_sampling[metric_name]
 
-    def _executeQueriesInParallel(self, is_experiment: bool = True):
-        """
-        Execute telemetry queries in parallel for all metric types.
+        return None  # No sampling
 
-        Args:
-            is_experiment: If True, use experiment methods, otherwise use non-experiment methods
+    def _performAutoSampling(self, histogram):
+        """Perform automatic sampling by counting entries in the time period."""
+        target_entries = self.config.get(
+            "sample_pct_auto_target", 500000000
+        )  # Default 500M
 
-        Returns:
-            Tuple of (event_metrics, crash_metrics, histograms, invalid_combinations)
-        """
-        # Track invalid branch/segment combinations for each metric
-        invalid_combinations = {}
+        print(f"Auto-sampling {histogram}: counting entries in time period...")
 
-        # Prepare all queries to run in parallel
-        query_tasks = []
-
-        # Select appropriate methods based on experiment type
-        if is_experiment:
-            pageload_method = self.getPageloadEventData
-            crash_method = self.getCrashEventData
-
-            def histogram_method(histogram_name):
-                return self.getHistogramData(self.config, histogram_name)
-
+        # Get date range for the count query
+        if self.config.get("startDate") and self.config.get("endDate"):
+            start_date = self.config["startDate"]
+            end_date = self.config["endDate"]
         else:
-            pageload_method = self.getPageloadEventDataNonExperiment
-            crash_method = self.getCrashEventDataNonExperiment
+            # Use first branch dates as fallback
+            branches = self.config["branches"]
+            start_date = branches[0]["startDate"]
+            end_date = branches[0]["endDate"]
 
-            def histogram_method(histogram_name):
-                return self.getHistogramDataNonExperiment(self.config, histogram_name)
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+        duration_days = (end_dt - start_dt).days + 1
 
-        # Add pageload event metric queries
-        for metric in self.config["pageload_event_metrics"]:
-            query_tasks.append(
-                {"type": "pageload", "metric": metric, "method": pageload_method}
+        # Build count query for single day sample
+        count_query = self._buildCountQuery(histogram, start_date, end_date)
+
+        print(f"Running count query for {histogram}...")
+        import time
+
+        start_time = time.time()
+        try:
+            job = self.client.query(count_query)
+            result = job.to_dataframe()
+            query_time = time.time() - start_time
+            print(f"Count query completed in {query_time:.1f} seconds")
+
+            if result.empty:
+                print(f"No data found for {histogram}")
+                return None
+
+            daily_rows = int(result.iloc[0]["daily_rows"])
+            daily_entries = int(result.iloc[0]["daily_entries"])
+            avg_entries_per_row = daily_entries / daily_rows if daily_rows > 0 else 0
+
+            # Extrapolate to full duration
+            total_rows = daily_rows * duration_days
+            total_entries = daily_entries * duration_days
+
+            print(
+                f"Found {daily_rows:,} daily rows with avg {avg_entries_per_row:.1f} entries/row"
+            )
+            print(
+                f"Estimated {duration_days} days: {total_rows:,} rows = {total_entries:,} total entries for {histogram}"
             )
 
-        # Add crash event metric queries
-        for metric in self.config["crash_event_metrics"]:
-            query_tasks.append(
-                {"type": "crash", "metric": metric, "method": crash_method}
-            )
+            if total_entries <= target_entries:
+                print(f"No sampling needed ({total_entries:,} ≤ {target_entries:,})")
+                return None
 
-        # Add histogram queries
-        for histogram in self.config["histograms"]:
-            query_tasks.append(
-                {
-                    "type": "histogram",
-                    "metric": histogram,
-                    "method": lambda h=histogram: histogram_method(h),
-                }
+            # Calculate required sampling percentage based on rows (since sampling affects row count)
+            target_rows = (
+                target_entries / avg_entries_per_row
+                if avg_entries_per_row > 0
+                else target_entries
             )
+            required_pct = (target_rows / total_rows) * 100
 
-        # Execute all queries in parallel
-        event_metrics = {}
-        crash_metrics = {}
-        histograms = {}
+            # Set minimum sampling of 0.1% (1 in 1,000)
+            min_pct = 0.1
+            if required_pct < min_pct:
+                print(
+                    f"Required sampling {required_pct:.6f}% is below minimum {min_pct}%, using {min_pct}% instead"
+                )
+                required_pct = min_pct
+
+            # For precise sampling, choose modulus based on scale needed
+            # Start with 1,000 to support 0.1% minimum (1 in 1,000)
+            modulus = 1000
+            required_threshold = int((required_pct / 100) * modulus)
+
+            # If we need finer precision, scale up modulus
+            if required_threshold == 0:
+                modulus = 1000000  # 0.0001% precision
+                required_threshold = int((required_pct / 100) * modulus)
+
+                # If still 0, use maximum modulus
+                if required_threshold == 0:
+                    modulus = 100000000  # 0.000001% precision
+                    required_threshold = max(1, int((required_pct / 100) * modulus))
+
+            actual_pct = (required_threshold / modulus) * 100
+            estimated_rows = int(total_rows * actual_pct / 100)
+            estimated_entries = int(estimated_rows * avg_entries_per_row)
+
+            print(
+                f"Using {actual_pct:.6f}% sampling (threshold {required_threshold}/{modulus}) ({total_rows:,} rows → ~{estimated_rows:,} rows = ~{estimated_entries:,} entries)"
+            )
+            return required_threshold, modulus  # Return threshold and modulus
+
+        except Exception as e:
+            print(f"Error counting entries for {histogram}: {e}")
+            print("Falling back to 1% sampling")
+            return 100, 10000  # 1% sampling as fallback
+
+    def _buildCountQuery(self, histogram, start_date, end_date):
+        """Build a count query to estimate entries for a histogram using single day sample."""
+        # Use most recent day for sampling
+        sample_date = end_date
+
+        return f"""
+        WITH desktop_stats AS (
+            SELECT
+                COUNT(*) as row_count,
+                AVG((SELECT SUM(value) FROM UNNEST({histogram}.values))) as avg_entries
+            FROM `mozdata.firefox_desktop.metrics` m
+            WHERE DATE(submission_timestamp) = DATE('{sample_date}')
+              AND {histogram} IS NOT NULL
+              AND normalized_channel = 'release'
+              AND normalized_app_name = 'Firefox'
+        ),
+        fenix_stats AS (
+            SELECT
+                COUNT(*) as row_count,
+                AVG((SELECT SUM(value) FROM UNNEST({histogram}.values))) as avg_entries
+            FROM `mozdata.fenix.metrics` m
+            WHERE DATE(submission_timestamp) = DATE('{sample_date}')
+              AND {histogram} IS NOT NULL
+        )
+        SELECT
+            (COALESCE(d.row_count, 0) + COALESCE(f.row_count, 0)) as daily_rows,
+            ((COALESCE(d.row_count, 0) * COALESCE(d.avg_entries, 0)) +
+             (COALESCE(f.row_count, 0) * COALESCE(f.avg_entries, 0))) as daily_entries
+        FROM desktop_stats d, fenix_stats f
+        """
+
+    def _parseSamplingConfig(self, sampling_config):
+        """Parse sampling configuration - handles both single percentage and (threshold, modulus) tuple."""
+        if sampling_config is None:
+            return None, None
+        elif isinstance(sampling_config, tuple):
+            # Auto-sampling returns (threshold, modulus)
+            threshold, modulus = sampling_config
+            return threshold, modulus
+        else:
+            # Manual percentage - convert to threshold/modulus format
+            return sampling_config, None
+
+    def _processHistogramsInParallel(self, histograms_to_process, is_experiment=True):
+        """Process histograms in parallel using ThreadPoolExecutor."""
+        if self.max_workers <= 1 or len(histograms_to_process) <= 1:
+            # Fall back to sequential processing
+            return self._processHistogramsSequential(
+                histograms_to_process, is_experiment
+            )
 
         print(
-            f"Running {len(query_tasks)} queries in parallel using {self.max_workers} threads..."
+            f"Processing {len(histograms_to_process)} histograms in parallel using {self.max_workers} threads..."
         )
+
+        histograms = {}
+        remove = []
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            # Submit all tasks
-            future_to_task = {}
-            for task in query_tasks:
-                if task["type"] == "histogram":
-                    future = executor.submit(task["method"])
+            # Submit all histogram processing tasks
+            future_to_histogram = {}
+            for histogram in histograms_to_process:
+                print(f"Starting thread for histogram: {histogram}")
+                if is_experiment:
+                    future = executor.submit(
+                        self.getHistogramData, self.config, histogram
+                    )
                 else:
-                    future = executor.submit(task["method"], task["metric"])
-                future_to_task[future] = task
+                    future = executor.submit(
+                        self.getHistogramDataNonExperiment, self.config, histogram
+                    )
+                future_to_histogram[future] = histogram
 
             # Collect results as they complete
-            for future in as_completed(future_to_task):
-                task = future_to_task[future]
+            for future in as_completed(future_to_histogram):
+                histogram = future_to_histogram[future]
                 try:
                     df = future.result()
-                    print(f"Completed {task['type']} query for {task['metric']}")
-                    print(df)
+                    print(f"Completed processing histogram: {histogram}")
 
-                    # Process based on metric type
-                    if task["type"] == "pageload":
-                        metric = task["metric"]
-                        if not invalidDataSet(
-                            df,
-                            f"pageload event: {metric}",
-                            self.config["branches"],
-                            self.config["segments"],
-                        ):
-                            event_metrics[metric] = df
-                            invalid_combinations[f"pageload_{metric}"] = (
-                                getInvalidBranchSegments(
-                                    df,
-                                    f"pageload event: {metric}",
-                                    self.config["branches"],
-                                    self.config["segments"],
-                                )
-                            )
-
-                    elif task["type"] == "crash":
-                        metric = task["metric"]
-                        if not invalidDataSet(
-                            df,
-                            f"crash event: {metric}",
-                            self.config["branches"],
-                            self.config["segments"],
-                        ):
-                            crash_metrics[metric] = df
-                            invalid_combinations[f"crash_{metric}"] = (
-                                getInvalidBranchSegments(
-                                    df,
-                                    f"crash event: {metric}",
-                                    self.config["branches"],
-                                    self.config["segments"],
-                                )
-                            )
-
-                    elif task["type"] == "histogram":
-                        histogram = task["metric"]
-                        if not invalidDataSet(
-                            df,
-                            histogram,
-                            self.config["branches"],
-                            self.config["segments"],
-                        ):
-                            histograms[histogram] = df
-                            invalid_combinations[f"histogram_{histogram}"] = (
-                                getInvalidBranchSegments(
-                                    df,
-                                    histogram,
-                                    self.config["branches"],
-                                    self.config["segments"],
-                                )
-                            )
+                    # Check if dataset is valid
+                    if invalidDataSet(
+                        df, histogram, self.config["branches"], self.config["segments"]
+                    ):
+                        print(f"Empty dataset found, marking for removal: {histogram}")
+                        remove.append(histogram)
+                    else:
+                        histograms[histogram] = df
 
                 except Exception as e:
-                    print(
-                        f"Error processing {task['type']} query for {task['metric']}: {e}"
-                    )
+                    print(f"Error processing histogram {histogram}: {e}")
+                    remove.append(histogram)
 
-        print(
-            f"Parallel query execution completed. Results: {len(event_metrics)} pageload, {len(crash_metrics)} crash, {len(histograms)} histogram metrics"
-        )
+        return histograms, remove
 
-        return event_metrics, crash_metrics, histograms, invalid_combinations
+    def _processHistogramsSequential(self, histograms_to_process, is_experiment=True):
+        """Process histograms sequentially (fallback method)."""
+        histograms = {}
+        remove = []
 
-    def collectResultsFromQuery_custom_segments(
-        self,
-        results: Dict[str, Any],
-        branch: str,
-        segment: str,
-        event_metrics: Dict[str, pd.DataFrame],
-        histograms: Dict[str, pd.DataFrame],
-        crash_metrics: Dict[str, pd.DataFrame],
-        invalid_combinations: Dict[str, List[tuple]] = None,
-    ) -> None:
-        """Collect results for custom segments (similar to OS segments but for custom user groups)."""
-        if invalid_combinations is None:
-            invalid_combinations = {}
+        for histogram in histograms_to_process:
+            try:
+                if is_experiment:
+                    df = self.getHistogramData(self.config, histogram)
+                else:
+                    df = self.getHistogramDataNonExperiment(self.config, histogram)
 
-        # For custom segments, only populate data when branch matches segment
-        # This avoids creating invalid combinations like "top100Addons branch with other segment"
-        if branch != segment:
-            return
+                # Check if dataset is valid
+                if invalidDataSet(
+                    df, histogram, self.config["branches"], self.config["segments"]
+                ):
+                    print(f"Empty dataset found, marking for removal: {histogram}")
+                    remove.append(histogram)
+                else:
+                    histograms[histogram] = df
 
-        for histogram in self.config["histograms"]:
-            # Skip this branch/segment if it's invalid for this histogram
-            histogram_key = f"histogram_{histogram}"
-            if histogram_key in invalid_combinations:
-                if (branch, segment) in invalid_combinations[histogram_key]:
-                    continue
+            except Exception as e:
+                print(f"Error processing histogram {histogram}: {e}")
+                remove.append(histogram)
 
-            if histogram not in histograms:
-                print(f"  WARNING: Skipping {histogram} - no data available")
-                continue
-
-            df = histograms[histogram]
-
-            # Filter for the specific branch and segment
-            df = df[(df["branch"] == branch) & (df["segment"] == segment)]
-
-            if not df.empty:
-                # Process the histogram data similar to OS segments
-                subset = df[(df["segment"] == segment) & (df["branch"] == branch)]
-                buckets = list(subset["bucket"])
-                counts = list(subset["counts"])
-
-                # Some clients report bucket sizes that are not real, and these buckets
-                # end up having 1-5 samples in them.  Filter these out entirely.
-                if self.config["histograms"][histogram]["kind"] == "numerical":
-                    remove = []
-                    for i in range(1, len(counts) - 1):
-                        if (
-                            counts[i - 1] > 1000 and counts[i] < counts[i - 1] / 100
-                        ) or (counts[i + 1] > 1000 and counts[i] < counts[i + 1] / 100):
-                            remove.append(i)
-                    for i in sorted(remove, reverse=True):
-                        del buckets[i]
-                        del counts[i]
-
-                # Add labels to the buckets for categorical histograms.
-                if self.config["histograms"][histogram]["kind"] == "categorical":
-                    labels = self.config["histograms"][histogram]["labels"]
-
-                    # Remove overflow bucket if it exists
-                    if len(labels) == (len(buckets) - 1) and counts[-1] == 0:
-                        del buckets[-1]
-                        del counts[-1]
-
-                    # Add missing buckets so they line up in each branch.
-                    if len(labels) > len(buckets):
-                        for i in range(len(buckets)):
-                            print(buckets[i], counts[i])
-                        new_counts = []
-                        for i, b in enumerate(labels):
-                            j = buckets.index(b) if b in buckets else None
-                            if j:
-                                new_counts.append(counts[j])
-                            else:
-                                new_counts.append(0)
-                        counts = new_counts
-
-                    # Remap bucket values to the appropriate label names.
-                    buckets = labels
-
-                # If there is a max, then overflow larger buckets into the max.
-                if "max" in self.config["histograms"][histogram]:
-                    maxBucket = self.config["histograms"][histogram]["max"]
-                    remove = []
-                    maxBucketCount = 0
-                    for i, x in enumerate(buckets):
-                        if x >= maxBucket:
-                            remove.append(i)
-                            maxBucketCount = maxBucketCount + counts[i]
-                    for i in sorted(remove, reverse=True):
-                        del buckets[i]
-                        del counts[i]
-                    buckets.append(maxBucket)
-                    counts.append(maxBucketCount)
-
-                assert len(buckets) == len(counts)
-                results[branch][segment]["histograms"][histogram] = {}
-                results[branch][segment]["histograms"][histogram]["bins"] = buckets
-                results[branch][segment]["histograms"][histogram]["counts"] = counts
-
-        # Process pageload event metrics
-        for metric in self.config.get("pageload_event_metrics", {}):
-            if metric in event_metrics:
-                df = event_metrics[metric]
-                subset = df[(df["segment"] == segment) & (df["branch"] == branch)]
-
-                if not subset.empty:
-                    buckets = list(subset["bucket"])
-                    counts = list(subset["counts"])
-
-                    assert len(buckets) == len(counts)
-                    results[branch][segment]["pageload_event_metrics"][metric] = {}
-                    results[branch][segment]["pageload_event_metrics"][metric][
-                        "bins"
-                    ] = buckets
-                    results[branch][segment]["pageload_event_metrics"][metric][
-                        "counts"
-                    ] = counts
-
-        # Process crash event metrics
-        for metric in self.config.get("crash_event_metrics", {}):
-            if metric in crash_metrics:
-                df = crash_metrics[metric]
-                subset = df[(df["segment"] == segment) & (df["branch"] == branch)]
-
-                if not subset.empty:
-                    buckets = list(subset["bucket"])
-                    counts = list(subset["counts"])
-
-                    assert len(buckets) == len(counts)
-                    results[branch][segment]["crash_event_metrics"][metric] = {}
-                    results[branch][segment]["crash_event_metrics"][metric][
-                        "bins"
-                    ] = buckets
-                    results[branch][segment]["crash_event_metrics"][metric][
-                        "counts"
-                    ] = counts
+        return histograms, remove
 
     def collectResultsFromQuery_OS_segments(
         self,
-        results: Dict[str, Any],
-        branch: str,
-        segment: str,
-        event_metrics: Dict[str, pd.DataFrame],
-        histograms: Dict[str, pd.DataFrame],
-        crash_metrics: Dict[str, pd.DataFrame],
-        invalid_combinations: Dict[str, List[tuple]] = None,
-    ) -> None:
-        if invalid_combinations is None:
-            invalid_combinations = {}
-
+        results,
+        branch,
+        segment,
+        event_metrics,
+        histograms,
+        crash_event_metrics=None,
+    ):
         for histogram in self.config["histograms"]:
-            # Skip this branch/segment if it's invalid for this histogram
-            histogram_key = f"histogram_{histogram}"
-            if histogram_key in invalid_combinations:
-                if (branch, segment) in invalid_combinations[histogram_key]:
-                    continue
-
-            if histogram not in histograms:
-                print(f"  WARNING: Skipping {histogram} - no data available")
-                continue
-
             df = histograms[histogram]
             if segment == "All":
                 subset = (
@@ -604,12 +462,6 @@ class TelemetryClient:
             print(f"    segment={segment} len(histogram: {histogram}) = ", len(buckets))
 
         for metric in self.config["pageload_event_metrics"]:
-            # Skip this branch/segment if it's invalid for this pageload metric
-            pageload_key = f"pageload_{metric}"
-            if pageload_key in invalid_combinations:
-                if (branch, segment) in invalid_combinations[pageload_key]:
-                    continue
-
             df = event_metrics[metric]
             if segment == "All":
                 subset = (
@@ -634,51 +486,47 @@ class TelemetryClient:
                 f"    segment={segment} len(pageload event: {metric}) = ", len(buckets)
             )
 
-        for metric in self.config["crash_event_metrics"]:
-            # Skip this metric if it was filtered out during data loading (no data available)
-            if metric not in crash_metrics:
-                continue
+        if crash_event_metrics is not None:
+            for metric in self.config.get("crash_event_metrics", {}):
+                df = crash_event_metrics[metric]
+                if segment == "All":
+                    # For 'All' segment, sum across all segments for this branch
+                    crash_count = df[df["branch"] == branch]["crash_count"].sum()
+                else:
+                    # For specific segment, get the crash count for this branch and segment
+                    subset = df[(df["segment"] == segment) & (df["branch"] == branch)]
+                    crash_count = subset["crash_count"].sum() if len(subset) > 0 else 0
 
-            # Skip this branch/segment if it's invalid for this crash metric
-            crash_key = f"crash_{metric}"
-            if crash_key in invalid_combinations:
-                if (branch, segment) in invalid_combinations[crash_key]:
-                    continue
+                results[branch][segment]["crash_event_metrics"][metric] = crash_count
+                print(f"    segment={segment} crash event: {metric} = {crash_count}")
 
-            df = crash_metrics[metric]
-            if segment == "All":
-                subset = df[df["branch"] == branch][["crash_count"]].sum()
-                crash_count = int(subset["crash_count"])
-            else:
-                subset = df[(df["segment"] == segment) & (df["branch"] == branch)]
-                crash_count = (
-                    int(subset["crash_count"].sum()) if not subset.empty else 0
-                )
-
-            results[branch][segment]["crash_event_metrics"][metric] = {
-                "crash_count": crash_count
-            }
-            print(
-                f"    segment={segment} crash metric: {metric} = {crash_count} crashes"
-            )
-
-    def getResults(self) -> Dict[str, Any]:
-        """
-        Get telemetry results for the configured experiment.
-
-        Returns:
-            Dictionary containing processed histogram and pageload event data
-        """
+    def getResults(self):
         if self.config["is_experiment"] is True:
             return self.getResultsForExperiment()
         else:
             return self.getResultsForNonExperiment()
 
     def getResultsForNonExperiment(self):
-        # Execute all queries in parallel using consolidated method
-        event_metrics, crash_metrics, histograms, invalid_combinations = (
-            self._executeQueriesInParallel(is_experiment=False)
+        # Get data for each pageload event metric.
+        event_metrics = {}
+        for metric in self.config["pageload_event_metrics"]:
+            event_metrics[metric] = self.getPageloadEventDataNonExperiment(metric)
+            print(event_metrics[metric])
+
+        # Get data for each crash event metric.
+        crash_event_metrics = {}
+        for metric in self.config.get("crash_event_metrics", {}):
+            crash_event_metrics[metric] = self.getCrashEventDataNonExperiment(metric)
+            print(f"Crash event data for {metric}: {crash_event_metrics[metric]}")
+
+        # Get data for each histogram in this segment.
+        histograms, remove = self._processHistogramsInParallel(
+            self.config["histograms"], is_experiment=False
         )
+
+        for hist in remove:
+            if hist in self.config["histograms"]:
+                del self.config["histograms"][hist]
 
         # Combine histogram and pageload event results.
         results = {}
@@ -696,47 +544,42 @@ class TelemetryClient:
                     "crash_event_metrics": {},
                 }
 
-                # Use custom branches or custom segments collection if available, otherwise OS segments
-                if config_has_custom_branches(self.config):
-                    # For custom branches, we still use OS segments but with custom branch filtering
-                    self.collectResultsFromQuery_OS_segments(
-                        results,
-                        branch_name,
-                        segment,
-                        event_metrics,
-                        histograms,
-                        crash_metrics,
-                        invalid_combinations,
-                    )
-                elif config_has_custom_segments(self.config):
-                    self.collectResultsFromQuery_custom_segments(
-                        results,
-                        branch_name,
-                        segment,
-                        event_metrics,
-                        histograms,
-                        crash_metrics,
-                        invalid_combinations,
-                    )
-                else:
-                    self.collectResultsFromQuery_OS_segments(
-                        results,
-                        branch_name,
-                        segment,
-                        event_metrics,
-                        histograms,
-                        crash_metrics,
-                        invalid_combinations,
-                    )
+                # Special case when segments is OS only.
+                self.collectResultsFromQuery_OS_segments(
+                    results,
+                    branch_name,
+                    segment,
+                    event_metrics,
+                    histograms,
+                    crash_event_metrics,
+                )
 
         results["queries"] = self.queries
         return results
 
     def getResultsForExperiment(self):
-        # Execute all queries in parallel using consolidated method
-        event_metrics, crash_metrics, histograms, invalid_combinations = (
-            self._executeQueriesInParallel(is_experiment=True)
+        # Get data for each pageload event metric.
+        event_metrics = {}
+        for metric in self.config["pageload_event_metrics"]:
+            event_metrics[metric] = self.getPageloadEventData(metric)
+            print(event_metrics[metric])
+
+        # Get data for each crash event metric.
+        crash_event_metrics = {}
+        for metric in self.config.get("crash_event_metrics", {}):
+            crash_event_metrics[metric] = self.getCrashEventData(metric)
+            print(f"Crash event data for {metric}: {crash_event_metrics[metric]}")
+
+        # Get data for each histogram in this segment.
+        histograms, remove = self._processHistogramsInParallel(
+            self.config["histograms"], is_experiment=True
         )
+
+        # Remove invalid histogram data.
+        for hist in remove:
+            if hist in self.config["histograms"]:
+                print(f"Empty dataset found, removing: {hist}.")
+                del self.config["histograms"][hist]
 
         # Combine histogram and pageload event results.
         results = {}
@@ -761,8 +604,7 @@ class TelemetryClient:
                     segment,
                     event_metrics,
                     histograms,
-                    crash_metrics,
-                    invalid_combinations,
+                    crash_event_metrics,
                 )
 
         results["queries"] = self.queries
@@ -804,7 +646,8 @@ class TelemetryClient:
         }
 
         query = t.render(context)
-        query = clean_sql_query(query)
+        # Remove empty lines before returning
+        query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
         self.queries.append({"name": f"Pageload event: {metric}", "query": query})
         return query
 
@@ -816,6 +659,11 @@ class TelemetryClient:
         metricMin = self.config["pageload_event_metrics"][metric]["min"]
         metricMax = self.config["pageload_event_metrics"][metric]["max"]
 
+        isp_blacklist = []
+        if "isp_blacklist" in self.config:
+            with open(self.config["isp_blacklist"], "r") as file:
+                isp_blacklist = [line.strip() for line in file]
+
         context = {
             "include_non_enrolled_branch": self.config["include_non_enrolled_branch"],
             "minVal": metricMin,
@@ -825,10 +673,12 @@ class TelemetryClient:
             "startDate": self.config["startDate"],
             "endDate": self.config["endDate"],
             "metric": metric,
+            "blacklist": isp_blacklist,
             "pageload_event_filter": self.config.get("pageload_event_filter"),
         }
         query = t.render(context)
-        query = clean_sql_query(query)
+        # Remove empty lines before returning
+        query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
         self.queries.append({"name": f"Pageload event: {metric}", "query": query})
         return query
 
@@ -864,7 +714,8 @@ class TelemetryClient:
             "segments": segmentInfo,
         }
         query = t.render(context)
-        query = clean_sql_query(query)
+        # Remove empty lines before returning
+        query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
         self.queries.append({"name": f"Pageload event: {metric}", "query": query})
         return query
 
@@ -872,6 +723,11 @@ class TelemetryClient:
     def generateHistogramQuery_OS_segments_legacy(self, histogram):
         t = get_template("experiment/legacy/histogram_os_segments.sql")
 
+        isp_blacklist = []
+        if "isp_blacklist" in self.config:
+            with open(self.config["isp_blacklist"], "r") as file:
+                isp_blacklist = [line.strip() for line in file]
+
         context = {
             "include_non_enrolled_branch": self.config["include_non_enrolled_branch"],
             "slug": self.config["slug"],
@@ -885,15 +741,22 @@ class TelemetryClient:
             "available_on_android": self.config["histograms"][histogram][
                 "available_on_android"
             ],
+            "blacklist": isp_blacklist,
         }
         query = t.render(context)
-        query = clean_sql_query(query)
+        # Remove empty lines before returning
+        query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
         self.queries.append({"name": f"Histogram: {histogram}", "query": query})
         return query
 
     def generateHistogramQuery_OS_segments_glean(self, histogram):
         t = get_template("experiment/glean/histogram_os_segments.sql")
 
+        isp_blacklist = []
+        if "isp_blacklist" in self.config:
+            with open(self.config["isp_blacklist"], "r") as file:
+                isp_blacklist = [line.strip() for line in file]
+
         context = {
             "include_non_enrolled_branch": self.config["include_non_enrolled_branch"],
             "slug": self.config["slug"],
@@ -907,12 +770,11 @@ class TelemetryClient:
             "available_on_android": self.config["histograms"][histogram][
                 "available_on_android"
             ],
-            "distribution_type": self.config["histograms"][histogram].get(
-                "distribution_type", "timing_distribution"
-            ),
+            "blacklist": isp_blacklist,
         }
         query = t.render(context)
-        query = clean_sql_query(query)
+        # Remove empty lines before returning
+        query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
         self.queries.append({"name": f"Histogram: {histogram}", "query": query})
         return query
 
@@ -951,7 +813,113 @@ class TelemetryClient:
             "channel": self.config["branches"][0]["channel"],
         }
         query = t.render(context)
-        query = clean_sql_query(query)
+        # Remove empty lines before returning
+        query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
+        self.queries.append({"name": f"Histogram: {histogram}", "query": query})
+        return query
+
+    def generateHistogramQuery_OS_segments_non_experiment_glean(self, histogram):
+        t = get_template("other/glean/histogram_os_segments.sql")
+
+        branches = self.config["branches"].copy()
+
+        # Add safe_name field for SQL identifiers (replace spaces with underscores)
+        for branch in branches:
+            branch["safe_name"] = branch["name"].replace(" ", "_")
+        for i in range(len(branches)):
+            branches[i]["last"] = False
+            if "version" in self.config["branches"][i]:
+                version = self.config["branches"][i]["version"]
+                branches[i][
+                    "ver_condition"
+                ] = f"AND SPLIT(client_info.app_display_version, '.')[offset(0)] = \"{version}\""
+            if "architecture" in self.config["branches"][i]:
+                arch = self.config["branches"][i]["architecture"]
+                branches[i][
+                    "arch_condition"
+                ] = f'AND client_info.architecture = "{arch}"'
+            if "glean_conditions" in self.config["branches"][i]:
+                branches[i]["glean_conditions"] = self.config["branches"][i][
+                    "glean_conditions"
+                ]
+
+        branches[-1]["last"] = True
+
+        # Determine if desktop and Android sections are needed based on configured segments
+        desktop_segments = {"Windows", "Linux", "Mac"}
+        android_segments = {"Android"}
+        configured_segments = set(self.config.get("segments", []))
+
+        needs_desktop = (
+            bool(desktop_segments & configured_segments)
+            and self.config["histograms"][histogram]["available_on_desktop"]
+        )
+        needs_android = (
+            bool(android_segments & configured_segments)
+            and self.config["histograms"][histogram]["available_on_android"]
+        )
+
+        # Create Android version of custom condition if it exists
+        for branch in branches:
+            if "custom_condition" in branch:
+                branch["custom_condition_android"] = branch["custom_condition"].replace(
+                    "m.metrics", "f.metrics"
+                )
+
+        # Render the prerequisite CTE template with date variables
+        prerequisite_cte_template = self.config.get("prerequisite_ctes", "")
+        if prerequisite_cte_template:
+            # Use string replacement for simple template variables
+            rendered_prerequisite_ctes = prerequisite_cte_template.replace(
+                "{{start_date}}", branches[0]["startDate"]
+            ).replace("{{end_date}}", branches[0]["endDate"])
+        else:
+            rendered_prerequisite_ctes = ""
+
+        # Get sampling/limiting configuration
+        sampling_config = self._calculateSamplePct(histogram)
+        sample_threshold, sample_modulus = self._parseSamplingConfig(sampling_config)
+
+        # For backward compatibility with templates, convert to old format if it's manual percentage
+        if sample_modulus is None and sample_threshold is not None:
+            sample_pct = sample_threshold
+        else:
+            sample_pct = sample_threshold
+
+        # Determine if using shared dates or per-branch dates
+        # Check if all branches have the same date range
+        first_start = branches[0]["startDate"]
+        first_end = branches[0]["endDate"]
+        all_same_dates = all(
+            b["startDate"] == first_start and b["endDate"] == first_end
+            for b in branches
+        )
+        use_shared_dates = all_same_dates
+
+        context = {
+            "histogram": histogram,
+            "available_on_desktop": self.config["histograms"][histogram][
+                "available_on_desktop"
+            ],
+            "available_on_android": self.config["histograms"][histogram][
+                "available_on_android"
+            ],
+            "needs_desktop": needs_desktop,
+            "needs_android": needs_android,
+            "branches": branches,
+            "prerequisite_ctes": rendered_prerequisite_ctes,
+            "use_shared_dates": use_shared_dates,
+            "start_date": branches[0]["startDate"],
+            "end_date": branches[0]["endDate"],
+            "channel": branches[0]["channel"],
+            "sample_pct": sample_pct,
+            "sample_threshold": sample_threshold,
+            "sample_modulus": sample_modulus or 100,  # Default to 100 for old templates
+        }
+
+        query = t.render(context)
+        # Remove empty lines before returning
+        query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
         self.queries.append({"name": f"Histogram: {histogram}", "query": query})
         return query
 
@@ -981,39 +949,179 @@ class TelemetryClient:
             "segments": segmentInfo,
         }
         query = t.render(context)
-        query = clean_sql_query(query)
+        # Remove empty lines before returning
+        query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
         self.queries.append({"name": f"Histogram: {histogram}", "query": query})
         return query
+
+    def checkForExistingData(self, filename):
+        if self.skipCache:
+            df = None
+        else:
+            try:
+                df = pd.read_pickle(filename)
+                print(f"Found local data in {filename}")
+            except Exception:
+                df = None
+        return df
+
+    def getHistogramDataNonExperiment(self, config, histogram):
+        slug = config["slug"]
+        hist_name = histogram.split(".")[-1]
+        filename = os.path.join(self.dataDir, f"{slug}-{hist_name}.pkl")
+
+        df = self.checkForExistingData(filename)
+        if df is not None:
+            return df
+
+        # Determine which query generator to use
+        if config_has_custom_branches(self.config) or config_has_custom_segments(
+            self.config
+        ):
+            query = self.generateHistogramQuery_OS_segments(
+                histogram, use_custom_conditions=True
+            )
+        elif segments_are_all_OS(self.config["segments"]):
+            if config["histograms"][histogram]["glean"]:
+                query = self.generateHistogramQuery_OS_segments_non_experiment_glean(
+                    histogram
+                )
+            else:
+                query = self.generateHistogramQuery_OS_segments_non_experiment_legacy(
+                    histogram
+                )
+        else:
+            print("No current support for generic non-experiment queries.")
+            sys.exit(1)
+
+        print("Running query:\n" + query)
+        job = self.client.query(query)
+        df = job.to_dataframe()
+
+        print(f"Writing '{slug}' histogram results for {histogram} to disk.")
+        df.to_pickle(filename)
+        return df
+
+    def getHistogramData(self, config, histogram):
+        slug = config["slug"]
+        hist_name = histogram.split(".")[-1]
+        filename = os.path.join(self.dataDir, f"{slug}-{hist_name}.pkl")
+
+        df = self.checkForExistingData(filename)
+        if df is not None:
+            return df
+
+        if segments_are_all_OS(self.config["segments"]):
+            if config["histograms"][histogram]["glean"]:
+                query = self.generateHistogramQuery_OS_segments_glean(histogram)
+            else:
+                query = self.generateHistogramQuery_OS_segments_legacy(histogram)
+        else:
+            # Generic segments are not well supported right now.
+            print("No current support for generic non-experiment queries.")
+            sys.exit(1)
+
+        print("Running query:\n" + query)
+        job = self.client.query(query)
+        df = job.to_dataframe()
+
+        print(f"Writing '{slug}' histogram results for {histogram} to disk.")
+        df.to_pickle(filename)
+        return df
+
+    def getPageloadEventDataNonExperiment(self, metric):
+        slug = self.config["slug"]
+        filename = os.path.join(self.dataDir, f"{slug}-pageload-events-{metric}.pkl")
+
+        df = self.checkForExistingData(filename)
+        if df is not None:
+            return df
+
+        if segments_are_all_OS(self.config["segments"]):
+            query = self.generatePageloadEventQuery_OS_segments_non_experiment(metric)
+        else:
+            print("Generic non-experiment query currently not supported.")
+            sys.exit(1)
+
+        print("Running query:\n" + query)
+        import time
+
+        start_time = time.time()
+        job = self.client.query(query)
+        df = job.to_dataframe()
+        query_time = time.time() - start_time
+        print(f"Query completed in {query_time:.1f} seconds")
+        print(f"Writing '{slug}' pageload event results to disk.")
+        df.to_pickle(filename)
+        return df
+
+    def getPageloadEventData(self, metric):
+        slug = self.config["slug"]
+        filename = os.path.join(self.dataDir, f"{slug}-pageload-events-{metric}.pkl")
+
+        df = self.checkForExistingData(filename)
+        if df is not None:
+            return df
+
+        if segments_are_all_OS(self.config["segments"]):
+            query = self.generatePageloadEventQuery_OS_segments(metric)
+        else:
+            # query = self.generatePageloadEventQuery_Generic()
+            print("No current support for generic pageload event queries.")
+            sys.exit(1)
+
+        print("Running query:\n" + query)
+        import time
+
+        start_time = time.time()
+        job = self.client.query(query)
+        df = job.to_dataframe()
+        query_time = time.time() - start_time
+        print(f"Query completed in {query_time:.1f} seconds")
+        print(f"Writing '{slug}' pageload event results to disk.")
+        df.to_pickle(filename)
+        return df
 
     def generateCrashEventQuery_OS_segments_non_experiment(self, metric):
         t = get_template("other/glean/crash_events_os_segments.sql")
 
-        branches = self.config["branches"]
+        branches = self.config["branches"].copy()
+
+        for branch in branches:
+            branch["safe_name"] = branch["name"].replace(" ", "_")
+
+            if "custom_condition" in branch:
+                branch["custom_condition_android"] = branch["custom_condition"].replace(
+                    "m.metrics", "f.metrics"
+                )
+
         for i in range(len(branches)):
-            branches[i]["last"] = False
-            if "version" in self.config["branches"][i]:
-                version = self.config["branches"][i]["version"]
+            if "version" in branches[i]:
+                version = branches[i]["version"]
                 branches[i][
                     "ver_condition"
                 ] = f"AND SPLIT(client_info.app_display_version, '.')[offset(0)] = \"{version}\""
-            if "architecture" in self.config["branches"][i]:
-                arch = self.config["branches"][i]["architecture"]
+            if "architecture" in branches[i]:
+                arch = branches[i]["architecture"]
                 branches[i][
                     "arch_condition"
                 ] = f'AND client_info.architecture = "{arch}"'
-            if "glean_conditions" in self.config["branches"][i]:
-                branches[i]["glean_conditions"] = self.config["branches"][i][
-                    "glean_conditions"
-                ]
-        branches[-1]["last"] = True
+
+            branches[i]["last"] = i == len(branches) - 1
+
+            # Setup glean_conditions from custom_condition
+            branches[i]["glean_conditions"] = []
+            if "custom_condition" in branches[i]:
+                branches[i]["glean_conditions"].append(
+                    f"AND ({branches[i]['custom_condition']})"
+                )
 
         context = {
-            "metric": metric,
             "branches": branches,
         }
 
         query = t.render(context)
-        query = clean_sql_query(query)
+        query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
         self.queries.append({"name": f"Crash event: {metric}", "query": query})
         return query
 
@@ -1026,12 +1134,63 @@ class TelemetryClient:
             "channel": self.config["channel"],
             "startDate": self.config["startDate"],
             "endDate": self.config["endDate"],
-            "metric": metric,
         }
         query = t.render(context)
-        query = clean_sql_query(query)
+        query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
         self.queries.append({"name": f"Crash event: {metric}", "query": query})
         return query
+
+    def getCrashEventDataNonExperiment(self, metric):
+        slug = self.config["slug"]
+        filename = os.path.join(self.dataDir, f"{slug}-crash-events-{metric}.pkl")
+
+        df = self.checkForExistingData(filename)
+        if df is not None:
+            return df
+
+        if segments_are_all_OS(self.config["segments"]):
+            query = self.generateCrashEventQuery_OS_segments_non_experiment(metric)
+        else:
+            print("Generic non-experiment crash event query currently not supported.")
+            sys.exit(1)
+
+        print("Running query:\n" + query)
+        import time
+
+        start_time = time.time()
+        job = self.client.query(query)
+        df = job.to_dataframe()
+        query_time = time.time() - start_time
+        print(f"Query completed in {query_time:.1f} seconds")
+        print(f"Writing '{slug}' crash event results to disk.")
+        df.to_pickle(filename)
+        return df
+
+    def getCrashEventData(self, metric):
+        slug = self.config["slug"]
+        filename = os.path.join(self.dataDir, f"{slug}-crash-events-{metric}.pkl")
+
+        df = self.checkForExistingData(filename)
+        if df is not None:
+            return df
+
+        if segments_are_all_OS(self.config["segments"]):
+            query = self.generateCrashEventQuery_OS_segments(metric)
+        else:
+            print("No current support for generic crash event queries.")
+            sys.exit(1)
+
+        print("Running query:\n" + query)
+        import time
+
+        start_time = time.time()
+        job = self.client.query(query)
+        df = job.to_dataframe()
+        query_time = time.time() - start_time
+        print(f"Query completed in {query_time:.1f} seconds")
+        print(f"Writing '{slug}' crash event results to disk.")
+        df.to_pickle(filename)
+        return df
 
     def generateHistogramQuery_OS_segments(
         self, histogram: str, use_custom_conditions: bool = True
@@ -1078,8 +1237,39 @@ class TelemetryClient:
         else:
             rendered_prerequisite_ctes = ""
 
-        # Determine if using shared dates (custom conditions) or per-branch dates (standard conditions)
-        use_shared_dates = use_custom_conditions
+        # Determine if using shared dates or per-branch dates
+        # Check if all branches have the same date range
+        first_start = branches[0]["startDate"]
+        first_end = branches[0]["endDate"]
+        all_same_dates = all(
+            b["startDate"] == first_start and b["endDate"] == first_end
+            for b in branches
+        )
+        use_shared_dates = all_same_dates
+
+        # Get sampling/limiting configuration
+        sampling_config = self._calculateSamplePct(histogram)
+        sample_threshold, sample_modulus = self._parseSamplingConfig(sampling_config)
+
+        # For backward compatibility with templates, convert to old format if it's manual percentage
+        if sample_modulus is None and sample_threshold is not None:
+            sample_pct = sample_threshold
+        else:
+            sample_pct = sample_threshold
+
+        # Determine if desktop and Android sections are needed based on configured segments
+        desktop_segments = {"Windows", "Linux", "Mac"}
+        android_segments = {"Android"}
+        configured_segments = set(self.config.get("segments", []))
+
+        needs_desktop = (
+            bool(desktop_segments & configured_segments)
+            and self.config["histograms"][histogram]["available_on_desktop"]
+        )
+        needs_android = (
+            bool(android_segments & configured_segments)
+            and self.config["histograms"][histogram]["available_on_android"]
+        )
 
         context = {
             "histogram": histogram,
@@ -1089,238 +1279,30 @@ class TelemetryClient:
             "start_date": branches[0]["startDate"] if use_shared_dates else None,
             "end_date": branches[0]["endDate"] if use_shared_dates else None,
             "channel": branches[0]["channel"] if use_shared_dates else None,
-            "sample_pct": self.config.get("sample_pct"),
-            "distribution_type": self.config["histograms"][histogram].get(
-                "distribution_type", "timing_distribution"
-            ),
+            "sample_pct": sample_pct,
+            "sample_threshold": sample_threshold,
+            "sample_modulus": sample_modulus or 100,
+            "needs_desktop": needs_desktop,
+            "needs_android": needs_android,
+            "available_on_desktop": self.config["histograms"][histogram][
+                "available_on_desktop"
+            ],
+            "available_on_android": self.config["histograms"][histogram][
+                "available_on_android"
+            ],
         }
 
         query = t.render(context)
-        query = clean_sql_query(query)
+        # Remove empty lines before returning
+        query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
+        # Clean up any trailing UNION ALL before the closing parenthesis
+        import re
+
+        query = re.sub(
+            r"\s*UNION ALL\s*\)\s*s\s*GROUP BY",
+            ") s\nGROUP BY",
+            query,
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
         self.queries.append({"name": f"Histogram: {histogram}", "query": query})
         return query
-
-    def generatePageloadEventQuery_custom_segments_non_experiment(self, metric: str):
-        """Generate pageload event query for custom segments in non-experiment mode."""
-        t = get_template("other/glean/pageload_events_custom_segments.sql")
-
-        # Prepare segment information with conditions
-        segments_info = []
-        for segment_name in self.config["segments"]:
-            segment_info = self.config["custom_segments_info"][segment_name]
-            segments_info.append(
-                {"name": segment_name, "conditions": segment_info["conditions"]}
-            )
-
-        branches = self.config["branches"]
-
-        context = {
-            "metric": metric,
-            "metrics": self.config["pageload_event_metrics"],
-            "branches": branches,
-            "segments": segments_info,
-            "prerequisite_ctes": self.config.get("prerequisite_ctes"),
-        }
-        query = t.render(context)
-        query = clean_sql_query(query)
-        self.queries.append({"name": f"Pageload event: {metric}", "query": query})
-        return query
-
-    def checkForExistingData(self, filename: str) -> Optional[pd.DataFrame]:
-        """
-        Check for existing cached data.
-
-        Args:
-            filename: Path to cached file
-
-        Returns:
-            DataFrame if cached data exists, None otherwise
-        """
-        if self.skipCache:
-            return None
-
-        try:
-            df = pd.read_pickle(filename)
-            print(f"Found local data in {filename}")
-            return df
-        except Exception:
-            return None
-
-    def getHistogramDataNonExperiment(
-        self, config: Dict[str, Any], histogram: str
-    ) -> pd.DataFrame:
-        slug = config["slug"]
-        hist_name = histogram.split(".")[-1]
-        filename = os.path.join(self.dataDir, f"{slug}-{hist_name}.pkl")
-
-        df = self.checkForExistingData(filename)
-        if df is not None:
-            return df
-
-        if config_has_custom_branches(self.config) or config_has_custom_segments(
-            self.config
-        ):
-            query = self.generateHistogramQuery_OS_segments(
-                histogram, use_custom_conditions=True
-            )
-        elif segments_are_all_OS(self.config["segments"]):
-            if config["histograms"][histogram]["glean"]:
-                query = self.generateHistogramQuery_OS_segments(
-                    histogram, use_custom_conditions=False
-                )
-            else:
-                query = self.generateHistogramQuery_OS_segments_non_experiment_legacy(
-                    histogram
-                )
-        else:
-            print("No current support for generic non-experiment queries.")
-            sys.exit(1)
-
-        print("Running query:\n" + query)
-        job = self.client.query(query)
-        df = job.to_dataframe()
-        print(f"Writing '{slug}' histogram results for {histogram} to disk.")
-        df.to_pickle(filename)
-        return df
-
-    def getHistogramData(self, config: Dict[str, Any], histogram: str) -> pd.DataFrame:
-        slug = config["slug"]
-        hist_name = histogram.split(".")[-1]
-        filename = os.path.join(self.dataDir, f"{slug}-{hist_name}.pkl")
-
-        df = self.checkForExistingData(filename)
-        if df is not None:
-            return df
-
-        if config_has_custom_branches(self.config) or config_has_custom_segments(
-            self.config
-        ):
-            # For experiments with custom branches/segments, we need to create experiment-specific templates
-            # For now, fall back to the generic approach
-            print(
-                "Custom branches/segments for experiments not yet implemented. Using non-experiment query."
-            )
-            query = self.generateHistogramQuery_OS_segments(
-                histogram, use_custom_conditions=True
-            )
-        elif segments_are_all_OS(self.config["segments"]):
-            if config["histograms"][histogram]["glean"]:
-                query = self.generateHistogramQuery_OS_segments_glean(histogram)
-            else:
-                query = self.generateHistogramQuery_OS_segments_legacy(histogram)
-        else:
-            # Generic segments are not well supported right now.
-            print("No current support for generic non-experiment queries.")
-            sys.exit(1)
-
-        print("Running query:\n" + query)
-        job = self.client.query(query)
-        df = job.to_dataframe()
-        print(f"Writing '{slug}' histogram results for {histogram} to disk.")
-        df.to_pickle(filename)
-        return df
-
-    def getPageloadEventDataNonExperiment(self, metric: str) -> pd.DataFrame:
-        slug = self.config["slug"]
-        filename = os.path.join(self.dataDir, f"{slug}-pageload-events-{metric}.pkl")
-
-        df = self.checkForExistingData(filename)
-        if df is not None:
-            return df
-
-        if config_has_custom_branches(self.config):
-            # For custom branches, we use OS segments with branch-level filtering
-            # For now, use the OS segments query since the data is already filtered at the SQL level
-            query = self.generatePageloadEventQuery_OS_segments_non_experiment(metric)
-        elif config_has_custom_segments(self.config):
-            query = self.generatePageloadEventQuery_custom_segments_non_experiment(
-                metric
-            )
-        elif segments_are_all_OS(self.config["segments"]):
-            query = self.generatePageloadEventQuery_OS_segments_non_experiment(metric)
-        else:
-            print("Generic non-experiment query currently not supported.")
-            sys.exit(1)
-
-        print("Running query:\n" + query)
-        job = self.client.query(query)
-        df = job.to_dataframe()
-        print(f"Writing '{slug}' pageload event results to disk.")
-        df.to_pickle(filename)
-        return df
-
-    def getPageloadEventData(self, metric: str) -> pd.DataFrame:
-        slug = self.config["slug"]
-        filename = os.path.join(self.dataDir, f"{slug}-pageload-events-{metric}.pkl")
-
-        df = self.checkForExistingData(filename)
-        if df is not None:
-            return df
-
-        if config_has_custom_branches(self.config):
-            print(
-                "Custom branches for experiments not yet implemented. Using non-experiment query."
-            )
-            query = self.generatePageloadEventQuery_OS_segments_non_experiment(metric)
-        elif config_has_custom_segments(self.config):
-            print(
-                "Custom segments for experiments not yet implemented. Using non-experiment query."
-            )
-            query = self.generatePageloadEventQuery_custom_segments_non_experiment(
-                metric
-            )
-        elif segments_are_all_OS(self.config["segments"]):
-            query = self.generatePageloadEventQuery_OS_segments(metric)
-        else:
-            # query = self.generatePageloadEventQuery_Generic()
-            print("No current support for generic pageload event queries.")
-            sys.exit(1)
-
-        print("Running query:\n" + query)
-        job = self.client.query(query)
-        df = job.to_dataframe()
-        print(f"Writing '{slug}' pageload event results to disk.")
-        df.to_pickle(filename)
-        return df
-
-    def getCrashEventDataNonExperiment(self, metric: str) -> pd.DataFrame:
-        slug = self.config["slug"]
-        filename = os.path.join(self.dataDir, f"{slug}-crash-events-{metric}.pkl")
-
-        df = self.checkForExistingData(filename)
-        if df is not None:
-            return df
-
-        if segments_are_all_OS(self.config["segments"]):
-            query = self.generateCrashEventQuery_OS_segments_non_experiment(metric)
-        else:
-            print("Generic non-experiment query currently not supported.")
-            sys.exit(1)
-
-        print("Running query:\n" + query)
-        job = self.client.query(query)
-        df = job.to_dataframe()
-        print(f"Writing '{slug}' crash event results to disk.")
-        df.to_pickle(filename)
-        return df
-
-    def getCrashEventData(self, metric: str) -> pd.DataFrame:
-        slug = self.config["slug"]
-        filename = os.path.join(self.dataDir, f"{slug}-crash-events-{metric}.pkl")
-
-        df = self.checkForExistingData(filename)
-        if df is not None:
-            return df
-
-        if segments_are_all_OS(self.config["segments"]):
-            query = self.generateCrashEventQuery_OS_segments(metric)
-        else:
-            print("No current support for generic crash event queries.")
-            sys.exit(1)
-
-        print("Running query:\n" + query)
-        job = self.client.query(query)
-        df = job.to_dataframe()
-        print(f"Writing '{slug}' crash event results to disk.")
-        df.to_pickle(filename)
-        return df

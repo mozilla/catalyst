@@ -449,10 +449,13 @@ class ReportGenerator:
                                         break
 
                                 higher_is_better = False
-                                if full_hist_name and full_hist_name in self.data["histograms"]:
-                                    higher_is_better = self.data["histograms"][full_hist_name].get(
-                                        "higher_is_better", False
-                                    )
+                                if (
+                                    full_hist_name
+                                    and full_hist_name in self.data["histograms"]
+                                ):
+                                    higher_is_better = self.data["histograms"][
+                                        full_hist_name
+                                    ].get("higher_is_better", False)
                                 if (
                                     effect_meaning == "None"
                                     or effect_meaning == "Small"
@@ -872,9 +875,7 @@ class ReportGenerator:
                     else:
                         control_mean = 0
                     if control_mean != 0:
-                        uplift = (
-                            (branch_mean - control_mean) / control_mean * 100.0
-                        )
+                        uplift = (branch_mean - control_mean) / control_mean * 100.0
                         uplift = "{0:.1f}".format(uplift)
                     else:
                         uplift = "0.0"

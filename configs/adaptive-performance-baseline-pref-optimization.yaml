@@ -1,0 +1,34 @@
+# Adaptive Performance Baseline Pref Optimization Experiment
+# Nimbus experiment with branches and dates from extractValuesFromAPI
+
+slug: adaptive-performance-baseline-pref-optimization
+
+segments:
+  - Windows
+  - Linux
+  - Mac
+
+histograms:
+  # Memory
+  - metrics.memory_distribution.memory_total
+  - metrics.memory_distribution.memory_heap_allocated
+
+  # Top level pageload
+  - metrics.timing_distribution.performance_pageload_fcp
+  - metrics.timing_distribution.performance_time_response_start
+  - metrics.timing_distribution.performance_pageload_load_time
+  - metrics.timing_distribution.perf_largest_contentful_paint
+
+  # Networking
+  - metrics.timing_distribution.networking_dns_lookup_time
+  - metrics.timing_distribution.network_tcp_connection
+  - metrics.timing_distribution.network_tls_handshake
+  - metrics.timing_distribution.networking_transaction_wait_time
+
+  # Gfx
+  - metrics.timing_distribution.gfx_composite_time
+  - metrics.timing_distribution.gfx_content_paint_time
+
+events:
+  - pageload
+  - crash

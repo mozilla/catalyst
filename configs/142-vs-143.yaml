@@ -1,0 +1,32 @@
+# Addon Performance Comparison: Default Users vs Self-Installed Top100 Addon Users
+slug: 142-vs-143-udp-throughput
+
+branches:
+  - name: "v142"
+    startDate: '2025-08-20'
+    endDate: '2025-09-03'
+    channel: "release"
+    custom_condition: |
+      app_version_major = 142
+      AND NOT 'fast-udp-for-firefox-large-release-experiment' IN UNNEST(ARRAY(SELECT key FROM UNNEST(m.ping_info.experiments)))
+  - name: "v143"
+    startDate: '2025-09-17'
+    endDate: '2025-10-01'
+    channel: "release"
+    custom_condition: |
+      app_version_major = 143
+      AND NOT 'fast-udp-for-firefox-large-release-experiment' IN UNNEST(ARRAY(SELECT key FROM UNNEST(m.ping_info.experiments)))
+
+segments:
+  - Windows
+  - Linux
+  - Mac
+
+# Performance histogram metrics to analyze
+histograms:
+  metrics.custom_distribution.networking_http_1_upload_throughput:
+    higher_is_better: true
+  metrics.custom_distribution.networking_http_2_upload_throughput:
+    higher_is_better: true
+  metrics.custom_distribution.networking_http_3_upload_throughput:
+    higher_is_better: true

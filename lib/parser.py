@@ -524,6 +524,18 @@ def parseConfigFile(configFile: str) -> Dict[str, Any]:
 
     if "branches" in config:
         config["is_experiment"] = False
+        # Validate branch names don't start with digits
+        for branch in config["branches"]:
+            if "name" in branch:
+                name = branch["name"]
+                if name and name[0].isdigit():
+                    print(
+                        f"ERROR: Branch name '{name}' cannot start with a digit (SQL identifier restriction)."
+                    )
+                    print(
+                        "Please rename the branch to start with a letter or underscore."
+                    )
+                    sys.exit(1)
     else:
         config["is_experiment"] = True
 

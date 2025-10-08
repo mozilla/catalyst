@@ -65,8 +65,9 @@ class TestConfigValidation(unittest.TestCase):
         # Validate histograms field format
         if "histograms" in config:
             histograms = config["histograms"]
-            self.assertIsInstance(
-                histograms, list, f"{config_file}: histograms must be a list"
+            self.assertTrue(
+                isinstance(histograms, (list, dict)),
+                f"{config_file}: histograms must be a list or dict",
             )
 
         # Validate events field format

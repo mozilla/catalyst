@@ -44,10 +44,10 @@ class TestTelemetry(unittest.TestCase):
         result = clean_sql_query(query)
 
         # Should not contain double newlines
-        self.assertNotIn('\n\n', result)
-        self.assertIn('SELECT', result)
-        self.assertIn('WHERE', result)
-        self.assertIn('ORDER BY', result)
+        self.assertNotIn("\n\n", result)
+        self.assertIn("SELECT", result)
+        self.assertIn("WHERE", result)
+        self.assertIn("ORDER BY", result)
 
     def test_clean_sql_query_empty_string(self):
         """Test clean_sql_query with empty string."""
@@ -116,26 +116,30 @@ class TestTelemetry(unittest.TestCase):
 
     def test_invalid_data_set_with_sufficient_data(self):
         """Test invalidDataSet with sufficient sample sizes."""
-        df = pd.DataFrame({
-            'segment': ['Windows', 'Linux'],
-            'branch': ['control', 'treatment'],
-            'counts': [2000, 1500]  # Above 1000 threshold
-        })
-        branches = [{'name': 'control'}, {'name': 'treatment'}]
-        segments = ['Windows', 'Linux']
+        df = pd.DataFrame(
+            {
+                "segment": ["Windows", "Linux", "Windows", "Linux"],
+                "branch": ["control", "control", "treatment", "treatment"],
+                "counts": [2000, 1500, 1800, 1600],  # Above 1000 threshold
+            }
+        )
+        branches = [{"name": "control"}, {"name": "treatment"}]
+        segments = ["Windows", "Linux"]
 
         result = invalidDataSet(df, "test_metric", branches, segments)
         self.assertFalse(result)
 
     def test_invalid_data_set_with_insufficient_data(self):
         """Test invalidDataSet with insufficient sample sizes."""
-        df = pd.DataFrame({
-            'segment': ['Windows', 'Linux'],
-            'branch': ['control', 'treatment'],
-            'counts': [100, 150]  # Below 1000 threshold
-        })
-        branches = [{'name': 'control'}, {'name': 'treatment'}]
-        segments = ['Windows', 'Linux']
+        df = pd.DataFrame(
+            {
+                "segment": ["Windows", "Linux", "Windows", "Linux"],
+                "branch": ["control", "control", "treatment", "treatment"],
+                "counts": [100, 150, 120, 180],  # Below 1000 threshold
+            }
+        )
+        branches = [{"name": "control"}, {"name": "treatment"}]
+        segments = ["Windows", "Linux"]
 
         result = invalidDataSet(df, "test_metric", branches, segments)
         # invalidDataSet only returns True for completely empty data, not insufficient sample sizes
@@ -144,51 +148,57 @@ class TestTelemetry(unittest.TestCase):
     def test_invalid_data_set_empty_dataframe(self):
         """Test invalidDataSet with empty DataFrame."""
         df = pd.DataFrame()
-        branches = [{'name': 'control'}]
-        segments = ['Windows']
+        branches = [{"name": "control"}]
+        segments = ["Windows"]
 
         result = invalidDataSet(df, "test_metric", branches, segments)
         self.assertTrue(result)
 
     def test_get_invalid_branch_segments_with_valid_data(self):
         """Test getInvalidBranchSegments with all valid data."""
-        df = pd.DataFrame({
-            'segment': ['Windows', 'Linux', 'Windows', 'Linux'],
-            'branch': ['control', 'control', 'treatment', 'treatment'],
-            'counts': [2000, 1500, 1800, 1200]
-        })
-        branches = [{'name': 'control'}, {'name': 'treatment'}]
-        segments = ['Windows', 'Linux']
+        df = pd.DataFrame(
+            {
+                "segment": ["Windows", "Linux", "Windows", "Linux"],
+                "branch": ["control", "control", "treatment", "treatment"],
+                "counts": [2000, 1500, 1800, 1200],
+            }
+        )
+        branches = [{"name": "control"}, {"name": "treatment"}]
+        segments = ["Windows", "Linux"]
 
         result = getInvalidBranchSegments(df, "test_metric", branches, segments)
         self.assertEqual(result, [])
 
     def test_get_invalid_branch_segments_with_missing_data(self):
         """Test getInvalidBranchSegments with missing combinations."""
-        df = pd.DataFrame({
-            'segment': ['Windows', 'Windows'],
-            'branch': ['control', 'treatment'],
-            'counts': [2000, 1800]
-        })
-        branches = [{'name': 'control'}, {'name': 'treatment'}]
-        segments = ['Windows', 'Linux']
+        df = pd.DataFrame(
+            {
+                "segment": ["Windows", "Windows"],
+                "branch": ["control", "treatment"],
+                "counts": [2000, 1800],
+            }
+        )
+        branches = [{"name": "control"}, {"name": "treatment"}]
+        segments = ["Windows", "Linux"]
 
         result = getInvalidBranchSegments(df, "test_metric", branches, segments)
-        expected = [('control', 'Linux'), ('treatment', 'Linux')]
+        expected = [("control", "Linux"), ("treatment", "Linux")]
         self.assertEqual(sorted(result), sorted(expected))
 
     def test_get_invalid_branch_segments_insufficient_counts(self):
         """Test getInvalidBranchSegments with insufficient counts."""
-        df = pd.DataFrame({
-            'segment': ['Windows', 'Linux'],
-            'branch': ['control', 'control'],
-            'counts': [500, 800]  # Below 1000 threshold
-        })
-        branches = [{'name': 'control'}]
-        segments = ['Windows', 'Linux']
+        df = pd.DataFrame(
+            {
+                "segment": ["Windows", "Linux"],
+                "branch": ["control", "control"],
+                "counts": [500, 800],  # Below 1000 threshold
+            }
+        )
+        branches = [{"name": "control"}]
+        segments = ["Windows", "Linux"]
 
         result = getInvalidBranchSegments(df, "test_metric", branches, segments)
-        expected = [('control', 'Windows'), ('control', 'Linux')]
+        expected = [("control", "Windows"), ("control", "Linux")]
         self.assertEqual(sorted(result), sorted(expected))
 
     @patch("lib.telemetry.bigquery.Client")
@@ -249,7 +259,7 @@ class TestTelemetry(unittest.TestCase):
         }
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            client = TelemetryClient(temp_dir, config)
+            client = TelemetryClient(temp_dir, config, skipCache=False)
 
             # Test with non-existent file
             result = client.checkForExistingData("non_existent_file.csv")
@@ -284,28 +294,30 @@ class TestTelemetry(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             # This should not raise an exception
-            client = TelemetryClient(temp_dir, config)
+            client = TelemetryClient(temp_dir, config, skipCache=False)
             self.assertIsNotNone(client)
 
-    @patch("lib.telemetry.sys.exit")
-    @patch("lib.telemetry.bigquery.Client")
-    def test_telemetry_client_authentication_check_failure(self, mock_bigquery_client, mock_exit):
-        """Test TelemetryClient authentication check with auth failure."""
-        mock_client = MagicMock()
-        mock_client.query.side_effect = Exception("Reauthentication is needed. Please run `gcloud auth application-default login` to reauthenticate.")
-        mock_bigquery_client.return_value = mock_client
+    # Authentication check was removed from TelemetryClient.__init__
+    # The client now fails at query time rather than init time
+    # @patch("lib.telemetry.sys.exit")
+    # @patch("lib.telemetry.bigquery.Client")
+    # def test_telemetry_client_authentication_check_failure(self, mock_bigquery_client, mock_exit):
+    #     """Test TelemetryClient authentication check with auth failure."""
+    #     mock_client = MagicMock()
+    #     mock_client.query.side_effect = Exception("Reauthentication is needed. Please run `gcloud auth application-default login` to reauthenticate.")
+    #     mock_bigquery_client.return_value = mock_client
 
-        config = {
-            "slug": "test-experiment",
-            "histograms": [],
-            "pageload_event_metrics": [],
-            "crash_event_metrics": [],
-        }
+    #     config = {
+    #         "slug": "test-experiment",
+    #         "histograms": [],
+    #         "pageload_event_metrics": [],
+    #         "crash_event_metrics": [],
+    #     }
 
-        with tempfile.TemporaryDirectory() as temp_dir:
-            # This should call sys.exit(1)
-            TelemetryClient(temp_dir, config)
-            mock_exit.assert_called_once_with(1)
+    #     with tempfile.TemporaryDirectory() as temp_dir:
+    #         # This should call sys.exit(1)
+    #         TelemetryClient(temp_dir, config, skipCache=False)
+    #         mock_exit.assert_called_once_with(1)
 
 
 if __name__ == "__main__":

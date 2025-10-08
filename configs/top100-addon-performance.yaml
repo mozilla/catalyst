@@ -1,22 +1,14 @@
-# Addon vs No-Addon Performance Comparison Report
-# Compares performance metrics between users with addons vs users with NO addons
-# Uses proper addon filtering criteria from addon_penetration_glean.sql
-# Date range: Sept 1 - Sept 30, 2025
-
+# Addon Performance Comparison: Default Users vs Self-Installed Top100 Addon Users
 slug: top100-addon-performance-comparison
 
-# Two branches representing different user populations
-# "no addons" is the control group (users with NO addons using proper filtering)
-
-# CTE to get top 100 addons
+# CTE to get top 100 addons and define self-installed addon criteria
 prerequisite_ctes: |
   top_100_addons AS (
     SELECT addon_id
     FROM (
       SELECT addon_id, avg(dau) as DAU
       FROM mozdata.telemetry.addons_daily
-      WHERE submission_date >= DATE('{{start_date}}')
-        AND submission_date <= DATE('{{end_date}}')
+      WHERE submission_date >= (CURRENT_DATE - INTERVAL '7' day)
         AND is_system = false
         AND addon_id not like '%mozilla%'
       GROUP BY 1
@@ -26,20 +18,33 @@ prerequisite_ctes: |
   )
 
 branches:
-  - name: "no addons"
-    startDate: '2025-08-01'
-    endDate: '2025-08-07'
+  - name: "default"
+    startDate: '2025-09-01'
+    endDate: '2025-09-07'
     channel: "release"
-    # Users with NO addons using proper filtering criteria (CONTROL GROUP)
+    # CONTROL GROUP: Users with NO self-installed addons AND no top100 addons
     custom_condition: |
-      m.metrics.object.addons_active_addons IS NULL
-  - name: "has addons"
-    startDate: '2025-08-01'
-    endDate: '2025-08-07'
+      app_version_major = 142 
+      AND NOT EXISTS(
+        SELECT 1
+        FROM UNNEST(JSON_EXTRACT_ARRAY(m.metrics.object.addons_active_addons)) AS addon
+        WHERE JSON_EXTRACT_SCALAR(addon, '$.scope') = '1'
+          AND JSON_EXTRACT_SCALAR(addon, '$.signedState') = '2'
+          AND JSON_EXTRACT_SCALAR(addon, '$.isSystem') = 'false'
+      )
+      AND NOT EXISTS(
+        SELECT 1
+        FROM UNNEST(JSON_EXTRACT_ARRAY(m.metrics.object.addons_active_addons)) AS addon
+        JOIN top_100_addons t100 ON JSON_EXTRACT_SCALAR(addon, '$.id') = t100.addon_id
+      )
+  - name: "top100_addon_users"
+    startDate: '2025-09-01'
+    endDate: '2025-09-07'
     channel: "release"
-    # Users who have at least one of the top 100 addons by DAU (TREATMENT GROUP)
+    # TREATMENT GROUP: Users with self-installed addons AND at least one top100 addon
     custom_condition: |
-      EXISTS(
+      app_version_major = 142 
+      AND EXISTS(
         SELECT 1
         FROM UNNEST(JSON_EXTRACT_ARRAY(m.metrics.object.addons_active_addons)) AS addon
         JOIN top_100_addons t100 ON JSON_EXTRACT_SCALAR(addon, '$.id') = t100.addon_id
@@ -50,13 +55,11 @@ segments:
   - Windows
   - Linux
   - Mac
-  - Android
 
 # Performance histogram metrics to analyze (using simple list format)
 histograms:
   # Memory
   - metrics.memory_distribution.memory_total
-  - metrics.memory_distribution.memory_heap_allocated
 
   # Top level pageload
   - metrics.timing_distribution.performance_pageload_fcp
@@ -70,9 +73,5 @@ histograms:
   - metrics.timing_distribution.network_tls_handshake
   - metrics.timing_distribution.networking_transaction_wait_time
 
-  # Gfx
-  - metrics.timing_distribution.gfx_composite_time
-  - metrics.timing_distribution.gfx_content_paint_time
-
-max_parallel_queries: 8
-sample_pct: 5
+max_parallel_queries: 1
+sample_pct: auto

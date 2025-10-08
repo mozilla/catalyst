@@ -202,7 +202,7 @@ class TestAnalysis(unittest.TestCase):
         result = createNumericalTemplate()
         self.assertIsInstance(result, dict)
         # Should contain basic template keys
-        basic_keys = ['mean', 'std', 'n']
+        basic_keys = ["mean", "std", "n"]
         for key in basic_keys:
             self.assertIn(key, result)
 
@@ -211,7 +211,7 @@ class TestAnalysis(unittest.TestCase):
         result = createCategoricalTemplate()
         self.assertIsInstance(result, dict)
         # Should contain basic template keys
-        basic_keys = ['counts', 'ratios', 'sum']
+        basic_keys = ["counts", "ratios", "sum"]
         for key in basic_keys:
             self.assertIn(key, result)
 
@@ -220,7 +220,7 @@ class TestAnalysis(unittest.TestCase):
         result = createScalarTemplate()
         self.assertIsInstance(result, dict)
         # Should contain basic template keys
-        basic_keys = ['count', 'n']
+        basic_keys = ["count", "n"]
         for key in basic_keys:
             self.assertIn(key, result)
 

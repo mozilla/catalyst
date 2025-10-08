@@ -114,7 +114,12 @@ def isValidMetricData(data, metric_name, branch, segment, source_section, data_t
             )
             return False
     elif data_type == "scalar":
-        scalar_value = data.get("crash_count", data.get("count", None))
+        # Handle both dictionary format and raw scalar values
+        if isinstance(data, dict):
+            scalar_value = data.get("crash_count", data.get("count", None))
+        else:
+            # For crash events, data is stored as a raw integer
+            scalar_value = data
         if scalar_value is None:
             print(
                 f"  WARNING: Skipping {branch}/{segment}: {source_section}.{metric_name} - no data available"

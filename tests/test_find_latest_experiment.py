@@ -260,7 +260,11 @@ class TestFindLatestExperiment(unittest.TestCase):
             # Check that crash events are included
             self.assertIn("crash", config["events"])
             # Check that pageload events are included
-            pageload_events = [event for event in config["events"] if isinstance(event, dict) and "pageload" in event]
+            pageload_events = [
+                event
+                for event in config["events"]
+                if isinstance(event, dict) and "pageload" in event
+            ]
             self.assertEqual(len(pageload_events), 1)
 
         finally:
@@ -291,7 +295,11 @@ class TestFindLatestExperiment(unittest.TestCase):
             # Check that crash events are included
             self.assertIn("crash", config["events"])
             # Check that pageload events are included
-            pageload_events = [event for event in config["events"] if isinstance(event, dict) and "pageload" in event]
+            pageload_events = [
+                event
+                for event in config["events"]
+                if isinstance(event, dict) and "pageload" in event
+            ]
             self.assertEqual(len(pageload_events), 1)
 
         finally:

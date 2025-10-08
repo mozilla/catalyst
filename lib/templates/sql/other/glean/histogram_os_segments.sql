@@ -9,6 +9,7 @@ WITH
 WITH
 {% endif %}
 {% for branch in branches %}
+{% if needs_desktop %}
 {{branch.safe_name}}_desktop as (
     SELECT
         normalized_os as segment,
@@ -20,7 +21,7 @@ WITH
         {% endif %}
         value as count
     FROM `mozdata.firefox_desktop.metrics` as m
-        CROSS JOIN UNNEST({{histogram}}.values)
+        CROSS JOIN UNNEST(m.{{histogram}}.values)
     WHERE
         {% if use_shared_dates %}
         DATE(submission_timestamp) >= DATE('{{start_date}}')
@@ -32,8 +33,8 @@ WITH
         AND normalized_channel = "{{branch.channel}}"
         {% endif %}
         AND normalized_app_name = "Firefox"
-        AND {{histogram}} is not null
-        {% if sample_pct %}AND MOD(ABS(FARM_FINGERPRINT(document_id)), 100) <= {{sample_pct}}{% endif %}
+        {% if sample_threshold %}AND MOD(ABS(FARM_FINGERPRINT(document_id)), {{sample_modulus}}) <= {{sample_threshold}}{% endif %}
+        AND m.{{histogram}} is not null
         {% if branch.custom_condition %}
         AND ({{branch.custom_condition}})
         {% endif %}
@@ -44,7 +45,9 @@ WITH
         {{condition}}
         {% endfor %}
         {% endif %}
-),
+){% if needs_android %},{% elif not forloop.last %},{% endif %}
+{% endif %}
+{% if needs_android %}
 {{branch.safe_name}}_android as (
     SELECT
         normalized_os as segment,
@@ -56,7 +59,7 @@ WITH
         {% endif %}
         value as count
     FROM `mozdata.fenix.metrics` as f
-        CROSS JOIN UNNEST({{histogram}}.values)
+        CROSS JOIN UNNEST(f.{{histogram}}.values)
     WHERE
         {% if use_shared_dates %}
         DATE(submission_timestamp) >= DATE('{{start_date}}')
@@ -67,8 +70,8 @@ WITH
         AND DATE(submission_timestamp) <= DATE('{{branch.endDate}}')
         AND normalized_channel = "{{branch.channel}}"
         {% endif %}
-        AND {{histogram}} is not null
-        {% if sample_pct %}AND MOD(ABS(FARM_FINGERPRINT(document_id)), 100) <= {{sample_pct}}{% endif %}
+        {% if sample_threshold %}AND MOD(ABS(FARM_FINGERPRINT(document_id)), {{sample_modulus}}) <= {{sample_threshold}}{% endif %}
+        AND f.{{histogram}} is not null
         {% if branch.custom_condition_android %}
         AND ({{branch.custom_condition_android}})
         {% endif %}
@@ -79,7 +82,7 @@ WITH
         {{condition}}
         {% endfor %}
         {% endif %}
-){% if not forloop.last %},
+){% if not forloop.last %},{% endif %}
 {% endif %}
 {% endfor %}
 
@@ -91,10 +94,16 @@ SELECT
 FROM
     (
 {% for branch in branches %}
+{% if needs_desktop %}
         SELECT * FROM {{branch.safe_name}}_desktop
+{% if needs_android %}
         UNION ALL
         SELECT * FROM {{branch.safe_name}}_android
-{% if not forloop.last %}
+{% endif %}
+{% elif needs_android %}
+        SELECT * FROM {{branch.safe_name}}_android
+{% endif %}
+{% if not loop.last %}
         UNION ALL
 {% endif %}
 {% endfor %}
