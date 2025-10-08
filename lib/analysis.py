@@ -40,6 +40,9 @@ def rank_biserial_correlation(n1, n2, U):
 # Return the t-value, p-value, and effect size via cohen's d.
 def calc_t_test(x1, x2, s1, s2, n1, n2):
     s_prime = np.sqrt((s1**2 / n1) + (s2**2) / n2)
+    if s_prime == 0:
+        raise ZeroDivisionError("t-test is undefined with zero variance")
+
     t_value = (x1 - x2) / s_prime
 
     df = (s1**2 / n1 + s2**2 / n2) ** 2 / (
