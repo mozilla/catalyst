@@ -16,5 +16,5 @@ RUN conda create --name catalyst python=3.10 && \
     conda run -n catalyst pip install --no-cache-dir -r requirements.txt
 
 COPY . .
-ENV BUCKET_URL="gs://moz-fx-data-prot-nonprod-c3a1-protodash/perf-reports"
+ENV BUCKET_URL="gs://protosaur-stage-iap-static-website/perf-reports"
 CMD ["conda", "run", "--no-capture-output", "-n", "catalyst", "/app/entry.sh"]
