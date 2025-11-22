@@ -183,6 +183,19 @@ def calculate_histogram_stats(bins, counts, data):
     data["quantiles"] = quantiles
     data["quantile_vals"] = vals
 
+    # Check for overflow bucket issues
+    # If >90% of data is in the last bucket, the histogram is likely saturated
+    if len(counts) > 0 and n > 0:
+        last_bucket_ratio = counts[-1] / n
+        if last_bucket_ratio > 0.90:
+            data["overflow_warning"] = {
+                "last_bucket_ratio": last_bucket_ratio,
+                "last_bucket_value": bins[-1],
+                "message": f"WARNING: {last_bucket_ratio*100:.1f}% of data is in the overflow bucket at {bins[-1]}. "
+                f"This histogram's maximum bucket is too small for the measured values, "
+                f"making statistical analysis unreliable."
+            }
+
 
 def calculate_histogram_tests_subsampling(control_data, branch_data, result):
     bins_control = control_data["bins"]
@@ -342,6 +355,14 @@ class DataAnalyzer:
             bins = data["bins"]
             counts = data["counts"]
             calculate_histogram_stats(bins, counts, result_location)
+
+            # Print overflow warning if detected
+            if "overflow_warning" in result_location:
+                warning = result_location["overflow_warning"]
+                print(
+                    f"  ⚠️  {branch}/{segment}/{metric_name}: {warning['last_bucket_ratio']*100:.1f}% "
+                    f"of data in overflow bucket (value={warning['last_bucket_value']})"
+                )
 
             # Calculate statistical tests for non-control branches
             if branch != self.control:

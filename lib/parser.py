@@ -235,11 +235,19 @@ def annotateHistograms(config: Dict[str, Any], probeIndex: Dict[str, Any]) -> No
                 print(f"ERROR: Type {type} for {hist_name} not currently supported.")
                 sys.exit(1)
 
-            # Use the high and low values from the legacy mirror as bounds.
-            if "telemetry_mirror" in probeIndex["glean"][hist_name]:
-                legacy_mirror = probeIndex["glean"][hist_name]["telemetry_mirror"]
-                high = probeIndex["legacy"][legacy_mirror]["details"]["high"]
-                config["histograms"][hist]["max"] = high
+            # Legacy mirror bounds are available but NOT applied by default.
+            # Glean histograms use their native bucket ranges which are often much wider
+            # than legacy limits (e.g., memory_total: 16GB legacy vs 115TB Glean).
+            # To explicitly use legacy max, set it in the config like:
+            #   histograms:
+            #     metrics.some_metric:
+            #       max: <value>
+            # To explicitly disable any max, use max: null
+            if "max" in config["histograms"][hist]:
+                if config["histograms"][hist]["max"] is None:
+                    # Explicitly set to null - remove the key to disable max bucketing
+                    del config["histograms"][hist]["max"]
+                # Otherwise keep the explicitly configured max value
 
         # Annotate legacy probe.
         elif hist_name.upper() in probeIndex["legacy"]:
@@ -293,11 +301,19 @@ def annotateHistograms(config: Dict[str, Any], probeIndex: Dict[str, Any]) -> No
                 print(f"ERROR: Type {type} for {hist_name} not currently supported.")
                 sys.exit(1)
 
-            # Use the high and low values from the legacy mirror as bounds.
-            if "telemetry_mirror" in probeIndex["glean"][hist_name]:
-                legacy_mirror = probeIndex["glean"][hist_name]["telemetry_mirror"]
-                high = probeIndex["legacy"][legacy_mirror]["details"]["high"]
-                config["histograms"][hist]["max"] = high
+            # Legacy mirror bounds are available but NOT applied by default.
+            # Glean histograms use their native bucket ranges which are often much wider
+            # than legacy limits (e.g., memory_total: 16GB legacy vs 115TB Glean).
+            # To explicitly use legacy max, set it in the config like:
+            #   histograms:
+            #     metrics.some_metric:
+            #       max: <value>
+            # To explicitly disable any max, use max: null
+            if "max" in config["histograms"][hist]:
+                if config["histograms"][hist]["max"] is None:
+                    # Explicitly set to null - remove the key to disable max bucketing
+                    del config["histograms"][hist]["max"]
+                # Otherwise keep the explicitly configured max value
 
         else:
             print(f"ERROR: {hist_name} not found in histograms schema.")

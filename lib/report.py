@@ -1058,6 +1058,39 @@ class ReportGenerator:
             with self.doc.div(klass="title"):
                 self.doc(f"({segment}) - {metric}")
 
+            # Check for overflow warning in any branch
+            overflow_warning = None
+            for branch in self.data["branches"]:
+                branch_name = branch["name"] if isinstance(branch, dict) else branch
+                if (
+                    branch_name in self.data
+                    and segment in self.data[branch_name]
+                    and data_type in self.data[branch_name][segment]
+                    and metric in self.data[branch_name][segment][data_type]
+                    and "overflow_warning"
+                    in self.data[branch_name][segment][data_type][metric]
+                ):
+                    overflow_warning = self.data[branch_name][segment][data_type][
+                        metric
+                    ]["overflow_warning"]
+                    break
+
+            # Display overflow warning if present
+            if overflow_warning:
+                with self.doc.div(
+                    style="background-color: #fff3cd; border: 2px solid #856404; padding: 15px; margin: 10px 0; border-radius: 5px;"
+                ):
+                    with self.doc.p(
+                        style="margin: 0; color: #856404; font-weight: bold;"
+                    ):
+                        self.doc("⚠️ Data Quality Warning")
+                    with self.doc.p(style="margin: 5px 0 0 0; color: #856404;"):
+                        self.doc(
+                            f"{overflow_warning['last_bucket_ratio']*100:.1f}% of all measurements are in the histogram's overflow bucket "
+                            f"(value={overflow_warning['last_bucket_value']}). This indicates the histogram's maximum value is too small for the "
+                            f"measured data, making the statistical analysis unreliable. Consider using a different metric with appropriate bucket ranges."
+                        )
+
             if data_type == "numerical":
                 # Create numerical charts (mean, CDF, uplift, PDF)
                 self.createNumericalCharts(segment, metric)
