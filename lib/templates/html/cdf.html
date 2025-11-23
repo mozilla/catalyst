@@ -30,12 +30,6 @@
               mode: 'interpolate',
               intersect: false
           },
-          crosshair: {
-            line: {
-              color: '#F66',  // crosshair line color
-              width: 1        // crosshair line width
-            }
-          },
           datalabels: { display: false },
           legend: {
               display: true,
@@ -55,6 +49,12 @@
           }
         },
         x: {
+          {% if unit %}
+          title: {
+            text: "{{unit}}",
+            display: true
+          },
+          {% endif %}
           ticks: {
             maxTicksLimit: 10
           }
@@ -99,11 +99,6 @@
           tooltip: {
               mode: 'interpolate',
               intersect: false
-          },
-          crosshair: {
-            sync: {
-              enabled: false
-            },
           },
           datalabels: { display: false },
           annotation: {
@@ -182,6 +177,12 @@
           }
         },
         x: {
+          {% if unit %}
+          title: {
+            text: "{{unit}}",
+            display: true
+          },
+          {% endif %}
           ticks: {
             maxTicksLimit: 10
           }

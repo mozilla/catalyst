@@ -165,9 +165,14 @@ class TelemetryClient:
             job.result(max_results=1)
         except Exception as e:
             error_message = str(e).lower()
-            if "reauthentication is needed" in error_message or "authentication" in error_message:
+            if (
+                "reauthentication is needed" in error_message
+                or "authentication" in error_message
+            ):
                 print("\n❌ BigQuery Authentication Error")
-                print("Your Google Cloud authentication has expired or is not configured.")
+                print(
+                    "Your Google Cloud authentication has expired or is not configured."
+                )
                 print("\nTo fix this, please run:")
                 print("  gcloud auth application-default login")
                 print("\nThen try running this command again.")

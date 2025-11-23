@@ -46,7 +46,7 @@ def cubic_spline_smooth(x, y, x_new):
         return [0.0] * len(x_new)
     tck = interpolate.splrep(x_prep, y_prep, k=3)
     y_new = interpolate.splev(x_new, tck, der=0)
-    return list(y_new)
+    return y_new.tolist()
 
 
 def find_value_at_quantile(values, cdf, q=0.95):
@@ -86,6 +86,21 @@ class ReportGenerator:
     def __init__(self, data):
         self.data = data
         self.doc = Airium()
+
+    def get_metric_unit(self, metric):
+        """Get the unit label for a metric based on its configuration."""
+        if "input" in self.data and "histograms" in self.data["input"]:
+            hist_config = self.data["input"]["histograms"].get(metric, {})
+
+            # Check if it's a memory distribution
+            if hist_config.get("distribution_type") == "memory_distribution":
+                return "bytes"
+
+            # Check if it's a timing distribution
+            elif hist_config.get("distribution_type") == "timing_distribution":
+                return "ms"
+
+        return ""  # No unit label
 
     def createHeader(self):
         t = get_template("header.html")
@@ -596,7 +611,7 @@ class ReportGenerator:
             maxValue = find_value_at_quantile(values_control, cdf_control)
             if maxValue is None:
                 return  # Skip chart if no valid quantile found
-            values_int = list(np.around(np.linspace(0, maxValue, 100), 2))
+            values_int = np.around(np.linspace(0, maxValue, 100), 2).tolist()
 
             datasets = []
             for branch in self.data["branches"]:
@@ -630,11 +645,13 @@ class ReportGenerator:
             # No control data available, skip this chart
             return
 
+        unit = self.get_metric_unit(metric)
         context = {
             "segment": segment,
             "metric": metric,
             "values": values_int,
             "datasets": datasets,
+            "unit": unit,
         }
         self.doc(t.render(context))
         return
@@ -698,8 +715,8 @@ class ReportGenerator:
         for i in range(len(quantiles)):
             diff = values_branch_n[i] - values_control_n[i]
             uplift = diff / values_control_n[i] * 100
-            diffs.append(diff)
-            uplifts.append(uplift)
+            diffs.append(float(diff))
+            uplifts.append(float(uplift))
 
         return [diffs, uplifts]
 
@@ -708,7 +725,7 @@ class ReportGenerator:
 
         control = self.data["branches"][0]
         control_name = control["name"] if isinstance(control, dict) else control
-        quantiles = list(np.around(np.linspace(0.1, 0.99, 99), 2))
+        quantiles = np.around(np.linspace(0.1, 0.99, 99), 2).tolist()
 
         display_metric = metric
 
@@ -738,6 +755,7 @@ class ReportGenerator:
             if abs(x) > maxPerc:
                 maxPerc = abs(x)
 
+        unit = self.get_metric_unit(metric)
         context = {
             "segment": segment,
             "metric": display_metric,
@@ -747,6 +765,7 @@ class ReportGenerator:
             "upliftMin": -maxPerc,
             "diffMax": maxVal,
             "diffMin": -maxVal,
+            "unit": unit,
         }
         self.doc(t.render(context))
 

@@ -193,7 +193,7 @@ def calculate_histogram_stats(bins, counts, data):
                 "last_bucket_value": bins[-1],
                 "message": f"WARNING: {last_bucket_ratio*100:.1f}% of data is in the overflow bucket at {bins[-1]}. "
                 f"This histogram's maximum bucket is too small for the measured values, "
-                f"making statistical analysis unreliable."
+                f"making statistical analysis unreliable.",
             }
 
 

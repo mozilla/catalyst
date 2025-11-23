@@ -230,6 +230,10 @@ def annotateHistograms(config: Dict[str, Any], probeIndex: Dict[str, Any]) -> No
             ]:
                 config["histograms"][hist]["kind"] = "numerical"
                 config["histograms"][hist]["distribution_type"] = schema["type"]
+
+                # Copy memory unit for memory distributions
+                if schema["type"] == "memory_distribution" and "memory_unit" in schema:
+                    config["histograms"][hist]["memory_unit"] = schema["memory_unit"]
             else:
                 type = schema["type"]
                 print(f"ERROR: Type {type} for {hist_name} not currently supported.")
@@ -296,6 +300,10 @@ def annotateHistograms(config: Dict[str, Any], probeIndex: Dict[str, Any]) -> No
             ]:
                 config["histograms"][hist]["kind"] = "numerical"
                 config["histograms"][hist]["distribution_type"] = schema["type"]
+
+                # Copy memory unit for memory distributions
+                if schema["type"] == "memory_distribution" and "memory_unit" in schema:
+                    config["histograms"][hist]["memory_unit"] = schema["memory_unit"]
             else:
                 type = schema["type"]
                 print(f"ERROR: Type {type} for {hist_name} not currently supported.")

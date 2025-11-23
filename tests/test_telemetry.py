@@ -299,11 +299,15 @@ class TestTelemetry(unittest.TestCase):
 
     @patch("lib.telemetry.sys.exit")
     @patch("lib.telemetry.bigquery.Client")
-    def test_telemetry_client_authentication_check_failure(self, mock_bigquery_client, mock_exit):
+    def test_telemetry_client_authentication_check_failure(
+        self, mock_bigquery_client, mock_exit
+    ):
         """Test TelemetryClient authentication check with auth failure."""
         mock_client = MagicMock()
         mock_job = MagicMock()
-        mock_job.result.side_effect = Exception("Reauthentication is needed. Please run `gcloud auth application-default login` to reauthenticate.")
+        mock_job.result.side_effect = Exception(
+            "Reauthentication is needed. Please run `gcloud auth application-default login` to reauthenticate."
+        )
         mock_client.query.return_value = mock_job
         mock_bigquery_client.return_value = mock_client
 
