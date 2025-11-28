@@ -351,7 +351,7 @@ def retrieveNimbusAPI(dataDir: str, slug: str, skipCache: bool) -> Dict[str, Any
         print(f"Using local config found in {filename}")
         return values
 
-    url = f"https://experimenter.services.mozilla.com/api/v7/experiments/{slug}/"
+    url = f"https://experimenter.services.mozilla.com/api/v8/experiments/{slug}/"
     print(f"Loading nimbus API from {url}")
 
     try:

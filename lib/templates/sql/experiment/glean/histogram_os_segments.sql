@@ -139,7 +139,7 @@ SELECT
     segment,
     branch,
     bucket,
-    SUM(count) as counts
+    SUM(CAST(count AS NUMERIC)) as counts
 FROM
     (
         SELECT * FROM desktop_data

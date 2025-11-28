@@ -35,7 +35,7 @@ SELECT
     segment,
     branch,
     bucket,
-    SUM(count) as counts
+    SUM(CAST(count AS NUMERIC)) as counts
 FROM
     bucketCounts_{{branch.name}}
 GROUP BY

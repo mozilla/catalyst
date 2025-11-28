@@ -76,7 +76,7 @@ def filter_and_sort(experiments):
     experiments.sort(key=lambda x: x["endDate"])
 
 def retrieve_nimbus_experiment_list():
-  url = 'https://experimenter.services.mozilla.com/api/v7/experiments/'
+  url = 'https://experimenter.services.mozilla.com/api/v8/experiments/'
   max_retries = 3
   timeout = 60  # seconds
   retry_delay = 60  # seconds

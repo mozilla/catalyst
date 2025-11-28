@@ -60,7 +60,7 @@ SELECT
     segment,
     branch,
     bucket,
-    SUM(count) as counts
+    SUM(CAST(count AS NUMERIC)) as counts
 FROM
 {% if include_null_branch == True %}
   (

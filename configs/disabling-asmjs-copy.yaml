@@ -1,0 +1,21 @@
+events:
+- crash
+- pageload:
+    fcp_time:
+      max: 30000
+    lcp_time:
+      max: 30000
+    load_time:
+      max: 30000
+    response_time:
+      max: 30000
+histograms:
+- metrics.memory_distribution.memory_total
+- metrics.timing_distribution.performance_pageload_fcp
+- metrics.timing_distribution.performance_pageload_load_time
+- metrics.timing_distribution.perf_largest_contentful_paint
+segments:
+- Windows
+- Linux
+- Mac
+slug: disabling-asmjs-copy
