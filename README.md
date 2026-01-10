@@ -50,6 +50,10 @@ Catalyst is a python project designed for analyzing and generating performance r
 
 4. **Generate performance report:**
    ```bash
+   # Simple syntax (recommended)
+   just run configs/my-experiment.yaml
+
+   # Or using --config flag
    just run --config configs/my-experiment.yaml
    ```
 
@@ -73,14 +77,28 @@ Automatically fix code formatting issues using Black
 ### 🚀 `just run [ARGS]`
 Generate performance reports from experiment configs
 ```bash
+# Simple syntax
+just run configs/experiment-name.yaml
+
+# Or with --config flag
 just run --config configs/experiment-name.yaml
+
+# With additional options
+just run configs/experiment-name.yaml --skip-cache
 ```
 
 ### 🔍 `just find-latest-experiment [ARGS]`
-Find and process latest experiments
+Find and process latest experiments (automatically includes CPU time percentiles)
 ```bash
-just find-latest-experiment --help
+just find-latest-experiment index.html failures.json
 ```
+
+**Default metrics included:**
+- Memory (total)
+- Page load metrics (FCP, load time, LCP)
+- CPU time per process type (percentiles: median, p75, p95)
+- Crash events
+- Pageload events (FCP, LCP, load time, response time)
 
 ### 📄 `just update-index [ARGS]`
 Update experiment index files
@@ -160,6 +178,32 @@ histograms:
   metrics.timing_distribution.performance_pageload_fcp:
     higher_is_better: false  # default
 ```
+
+### Labeled Counter Metrics
+
+`labeled_counter` metrics (like `power_cpu_time_per_process_type_ms`) require an **aggregate mode** to specify how to analyze the per-label data:
+
+**Available aggregate modes:**
+
+**1. `aggregate: sum`** - Sum all values per label (for event counters)
+```yaml
+histograms:
+  - metrics.labeled_counter.javascript_gc_slice_was_long:
+      aggregate: sum
+```
+- Shows: Total counts per label in categorical bar charts
+- Layout: Individual tables per label, branches as rows
+- Use for: Event counters where you want to see total occurrences
+
+**2. `aggregate: percentiles`** - Calculate percentiles per label (for measurements)
+```yaml
+histograms:
+  - metrics.labeled_counter.power_cpu_time_per_process_type_ms:
+      aggregate: percentiles
+```
+- Shows: Median, p75, p95, and their individual uplifts per label
+- Layout: Individual tables per label, branches as rows
+- Use for: Understanding distribution characteristics (median, tails)
 
 ### Event Configuration Options
 

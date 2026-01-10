@@ -1,5 +1,5 @@
 {% autoescape off %}
-<div class="chart"><canvas height="250px" id="{{segment}}-{{metric}}-categorical"></canvas></div>
+<div class="chart"><canvas height="400px" id="{{segment}}-{{metric}}-categorical"></canvas></div>
 <script>
   ctx = document.getElementById('{{segment}}-{{metric}}-categorical');
 
@@ -12,7 +12,7 @@
 {% for dataset in datasets %}
         {
           label: "{{dataset.branch}}",
-          data: {{dataset.ratios}},
+          data: {{dataset.counts}},
           {% if dataset.uplift %}
           uplift: {{dataset.uplift}}
           {% endif %}
@@ -40,7 +40,7 @@
           grace: '50%',
           beginAtZero: true,
           title: {
-            text: "Proportion",
+            text: "Count{% if unit %} ({{unit}}){% endif %}",
             display: true
           }
         },
@@ -51,4 +51,41 @@
     }
   });
 </script>
+
+<div style="margin-top: 20px;">
+{% for row in table_rows %}
+  <div style="margin-bottom: 20px;">
+    <h5 style="margin: 5px 0; color: #555; font-weight: bold;">{{row.label}}</h5>
+    <table border="1" cellpadding="0" cellspacing="0" class="stat-table" style="table-layout: fixed; width: 100%;">
+      <colgroup>
+        <col style="width: 35%;">
+        <col style="width: 30%;">
+        <col style="width: 35%;">
+      </colgroup>
+      <thead>
+        <tr>
+          <th style="font-size: 11px; padding: 6px;">Branch</th>
+          <th style="font-size: 11px; padding: 6px;">Count{% if unit %} ({{unit}}){% endif %}</th>
+          <th style="font-size: 11px; padding: 6px;">Uplift (%)</th>
+        </tr>
+      </thead>
+      <tbody>
+{% for branch_row in row.branch_rows %}
+        <tr style="background-color: {% if forloop.counter0|divisibleby:2 %}#f9f9f9{% else %}#ffffff{% endif %};">
+          <td style="text-align: left; padding: 6px; font-size: 13px;">{{branch_row.branch_name}}</td>
+          <td style="padding: 6px; font-size: 13px;">{{branch_row.count}}</td>
+          <td style="padding: 6px; font-size: 13px;{% if branch_row.uplift is not none and branch_row.uplift >= 10 %} background-color: #ffcdd2; color: #c62828;{% elif branch_row.uplift is not none and branch_row.uplift <= -10 %} background-color: #c8e6c9; color: #2e7d32;{% endif %}">
+{% if branch_row.uplift is not none %}
+            {{branch_row.uplift|floatformat:2}}%
+{% else %}
+            -
+{% endif %}
+          </td>
+        </tr>
+{% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endfor %}
+</div>
 {% endautoescape %}

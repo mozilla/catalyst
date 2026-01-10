@@ -210,8 +210,8 @@ class TestAnalysis(unittest.TestCase):
         """Test createCategoricalTemplate function."""
         result = createCategoricalTemplate()
         self.assertIsInstance(result, dict)
-        # Should contain basic template keys
-        basic_keys = ["counts", "ratios", "sum"]
+        # Should contain basic template keys (ratios removed - we use raw counts)
+        basic_keys = ["counts", "labels", "sum"]
         for key in basic_keys:
             self.assertIn(key, result)
 

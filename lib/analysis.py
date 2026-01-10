@@ -4,9 +4,11 @@ import numpy as np
 
 # Expand the histogram into an array of values
 def flatten_histogram(bins, counts):
+    # Convert counts to int in case they're decimal.Decimal from BigQuery
+    counts = [int(c) for c in counts]
     array = []
     for i in range(len(bins)):
-        for j in range(1, int(counts[i] / 2.0)):
+        for j in range(1, counts[i] // 2):
             array.append(bins[i])
     return array
 
@@ -95,13 +97,16 @@ def calc_histogram_quantiles(bins, density):
 
 
 def calc_histogram_density(counts, n):
+    # Convert counts to float in case they're decimal.Decimal from BigQuery
+    counts = [float(c) for c in counts]
+    n = float(n)
     density = []
     cdf = []
     cum = 0
     for i in range(len(counts)):
-        density.append(float(counts[i] / n))
+        density.append(counts[i] / n)
         cum = cum + counts[i]
-        cdf.append(float(cum))
+        cdf.append(cum)
     cdf = [x / cum for x in cdf]
     return [density, cdf]
 
@@ -129,6 +134,8 @@ def calc_histogram_mean_var(bins, counts):
 
 def calc_histogram_median(bins, counts):
     """Calculate median from histogram bins and counts."""
+    # Convert counts to int in case they're decimal.Decimal from BigQuery
+    counts = [int(c) for c in counts]
     total_count = sum(counts)
     if total_count == 0:
         return 0.0
@@ -186,7 +193,7 @@ def calculate_histogram_stats(bins, counts, data):
     # Check for overflow bucket issues
     # If >90% of data is in the last bucket, the histogram is likely saturated
     if len(counts) > 0 and n > 0:
-        last_bucket_ratio = counts[-1] / n
+        last_bucket_ratio = float(counts[-1]) / float(n)
         if last_bucket_ratio > 0.90:
             data["overflow_warning"] = {
                 "last_bucket_ratio": last_bucket_ratio,
@@ -281,7 +288,7 @@ def createNumericalTemplate():
 
 
 def createCategoricalTemplate():
-    template = {"desc": "", "labels": [], "counts": [], "ratios": [], "sum": 0}
+    template = {"desc": "", "labels": [], "counts": [], "sum": 0}
     return template
 
 
@@ -299,6 +306,7 @@ def createResultsTemplate(config):
                 "numerical": {},
                 "categorical": {},
                 "scalar": {},
+                "labeled_percentiles": {},
             }
     return template
 
@@ -317,7 +325,8 @@ class DataAnalyzer:
             transformedData: Data organized by types: {
                 "numerical": [...],
                 "categorical": [...],
-                "scalar": [...]
+                "scalar": [...],
+                "labeled_percentiles": [...]
             }
         """
         print("Processing unified data types...")
@@ -326,6 +335,7 @@ class DataAnalyzer:
         self.processNumericalMetrics(transformedData["numerical"])
         self.processCategoricalMetrics(transformedData["categorical"])
         self.processScalarMetrics(transformedData["scalar"])
+        self.processLabeledPercentilesMetrics(transformedData.get("labeled_percentiles", []))
 
         return self.results
 
@@ -412,21 +422,23 @@ class DataAnalyzer:
             result_location["counts"] = counts
             total = sum(counts)
             result_location["sum"] = total
-            ratios = [x / total for x in counts]
-            result_location["ratios"] = ratios
 
-            # Calculate uplift for non-control branches
+            # Calculate uplift for non-control branches (percentage change in raw counts)
             if branch != self.control:
-                # Find corresponding control data
                 if metric_name in self.results[self.control][segment]["categorical"]:
                     control_result = self.results[self.control][segment]["categorical"][
                         metric_name
                     ]
-                    if "ratios" in control_result:
-                        control_ratios = control_result["ratios"]
+                    if "counts" in control_result:
+                        control_counts = control_result["counts"]
                         uplift = []
-                        for i in range(len(ratios)):
-                            uplift.append((ratios[i] - control_ratios[i]) * 100)
+                        for i in range(len(counts)):
+                            if control_counts[i] > 0:
+                                uplift.append(
+                                    ((counts[i] - control_counts[i]) / control_counts[i]) * 100
+                                )
+                            else:
+                                uplift.append(0)
                         result_location["uplift"] = uplift
 
     def processScalarMetrics(self, scalar_metrics):
@@ -486,3 +498,92 @@ class DataAnalyzer:
                         # Calculate absolute difference
                         absolute_diff = scalar_value - control_value
                         result_location["absolute_difference"] = absolute_diff
+
+    def processLabeledPercentilesMetrics(self, labeled_percentiles_metrics):
+        """Process all labeled_percentiles metrics - median, p75, p95 per label."""
+        print(f"Processing {len(labeled_percentiles_metrics)} labeled_percentiles metrics")
+
+        for metric_data in labeled_percentiles_metrics:
+            branch = metric_data["branch"]
+            segment = metric_data["segment"]
+            metric_name = metric_data["metric_name"]
+            source_section = metric_data["source_section"]
+            config = metric_data["config"]
+            data = metric_data["data"]
+
+            print(f"  {branch}/{segment}: {source_section}.{metric_name}")
+
+            # Store in results structure by data type
+            if metric_name not in self.results[branch][segment]["labeled_percentiles"]:
+                self.results[branch][segment]["labeled_percentiles"][metric_name] = {
+                    "desc": config.get("desc", f"{metric_name}"),
+                    "labels": [],
+                    "medians": [],
+                    "p75s": [],
+                    "p95s": [],
+                    "counts": [],
+                }
+            result_location = self.results[branch][segment]["labeled_percentiles"][metric_name]
+
+            # Store the data
+            result_location["labels"] = data["labels"]
+            result_location["medians"] = data["medians"]
+            result_location["p75s"] = data["p75s"]
+            result_location["p95s"] = data["p95s"]
+            result_location["counts"] = data["counts"]
+
+            # Calculate uplift for non-control branches
+            if branch != self.control:
+                if metric_name in self.results[self.control][segment]["labeled_percentiles"]:
+                    control_result = self.results[self.control][segment]["labeled_percentiles"][
+                        metric_name
+                    ]
+                    control_labels = control_result["labels"]
+                    control_medians = control_result["medians"]
+                    control_p75s = control_result["p75s"]
+                    control_p95s = control_result["p95s"]
+
+                    # Create label->percentile mappings for control
+                    control_median_map = dict(zip(control_labels, control_medians))
+                    control_p75_map = dict(zip(control_labels, control_p75s))
+                    control_p95_map = dict(zip(control_labels, control_p95s))
+
+                    # Calculate uplift for each label and percentile
+                    median_uplifts = []
+                    p75_uplifts = []
+                    p95_uplifts = []
+
+                    for i, label in enumerate(data["labels"]):
+                        # Median uplift
+                        if label in control_median_map and control_median_map[label] > 0:
+                            pct_change = (
+                                (data["medians"][i] - control_median_map[label])
+                                / control_median_map[label]
+                            ) * 100
+                            median_uplifts.append(pct_change)
+                        else:
+                            median_uplifts.append(0.0)
+
+                        # p75 uplift
+                        if label in control_p75_map and control_p75_map[label] > 0:
+                            pct_change = (
+                                (data["p75s"][i] - control_p75_map[label])
+                                / control_p75_map[label]
+                            ) * 100
+                            p75_uplifts.append(pct_change)
+                        else:
+                            p75_uplifts.append(0.0)
+
+                        # p95 uplift
+                        if label in control_p95_map and control_p95_map[label] > 0:
+                            pct_change = (
+                                (data["p95s"][i] - control_p95_map[label])
+                                / control_p95_map[label]
+                            ) * 100
+                            p95_uplifts.append(pct_change)
+                        else:
+                            p95_uplifts.append(0.0)
+
+                    result_location["median_uplifts"] = median_uplifts
+                    result_location["p75_uplifts"] = p75_uplifts
+                    result_location["p95_uplifts"] = p95_uplifts

@@ -18,6 +18,7 @@ default_histograms = [
   "metrics.timing_distribution.performance_pageload_fcp",
   "metrics.timing_distribution.performance_pageload_load_time",
   "metrics.timing_distribution.perf_largest_contentful_paint",
+  {"metrics.labeled_counter.power_cpu_time_per_process_type_ms": {"aggregate": "percentiles"}},
 ]
 
 default_events = {

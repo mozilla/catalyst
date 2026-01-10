@@ -16,12 +16,18 @@ WITH
         "{{branch.name}}" as branch,
         {% if distribution_type == "timing_distribution" %}
         CAST(key as INT64)/1000000 AS bucket,
+        {% elif distribution_type == "labeled_counter" %}
+        key AS bucket,
         {% else %}
         CAST(key as INT64) AS bucket,
         {% endif %}
         value as count
     FROM `mozdata.firefox_desktop.metrics` as m
+        {% if distribution_type == "labeled_counter" %}
+        CROSS JOIN UNNEST(m.{{histogram}})
+        {% else %}
         CROSS JOIN UNNEST(m.{{histogram}}.values)
+        {% endif %}
     WHERE
         {% if use_shared_dates %}
         DATE(submission_timestamp) >= DATE('{{start_date}}')
@@ -55,12 +61,18 @@ WITH
         "{{branch.name}}" as branch,
         {% if distribution_type == "timing_distribution" %}
         CAST(key as INT64)/1000000 AS bucket,
+        {% elif distribution_type == "labeled_counter" %}
+        key AS bucket,
         {% else %}
         CAST(key as INT64) AS bucket,
         {% endif %}
         value as count
     FROM `mozdata.fenix.metrics` as f
+        {% if distribution_type == "labeled_counter" %}
+        CROSS JOIN UNNEST(f.{{histogram}})
+        {% else %}
         CROSS JOIN UNNEST(f.{{histogram}}.values)
+        {% endif %}
     WHERE
         {% if use_shared_dates %}
         DATE(submission_timestamp) >= DATE('{{start_date}}')

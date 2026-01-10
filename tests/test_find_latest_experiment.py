@@ -204,12 +204,13 @@ class TestFindLatestExperiment(unittest.TestCase):
         exp = {"slug": "test-exp"}
         histograms = generate_histogram_metrics(exp)
 
-        # Should return default histograms
+        # Should return default histograms (including labeled_counter with aggregate mode)
         expected_histograms = [
             "metrics.memory_distribution.memory_total",
             "metrics.timing_distribution.performance_pageload_fcp",
             "metrics.timing_distribution.performance_pageload_load_time",
             "metrics.timing_distribution.perf_largest_contentful_paint",
+            {"metrics.labeled_counter.power_cpu_time_per_process_type_ms": {"aggregate": "percentiles"}},
         ]
         self.assertEqual(histograms, expected_histograms)
 

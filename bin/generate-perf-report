@@ -10,7 +10,8 @@ from lib.generate import generate_report
 
 def parseArguments():
   parser = argparse.ArgumentParser(description='Process telemetry performance report.')
-  parser.add_argument('--config', type=str, required=True, help="Input JSON config file.")
+  parser.add_argument('config_file', type=str, nargs='?', help="Config file path (can also use --config)")
+  parser.add_argument('--config', type=str, help="Input JSON config file.")
   parser.add_argument('--dataDir', type=str, default="data", help="Directory to save data to.")
   parser.add_argument('--reportDir', type=str, default="reports", help="Directory to save results to.")
   parser.add_argument('--skip-cache', action=argparse.BooleanOptionalAction,
@@ -20,6 +21,13 @@ def parseArguments():
   parser.add_argument('--max-duration-days', type=int, default=None,
                       help="Limit data collection to the last N days of the experiment (optional).")
   args = parser.parse_args()
+
+  # Use positional argument if --config not provided
+  if args.config is None:
+    if args.config_file is None:
+      parser.error("Config file required: provide either 'config_file' or --config")
+    args.config = args.config_file
+
   return args
 
 if __name__ == "__main__":

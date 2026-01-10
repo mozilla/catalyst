@@ -185,21 +185,23 @@ def annotateHistograms(config: Dict[str, Any], probeIndex: Dict[str, Any]) -> No
 
     histograms_input = config["histograms"]
 
+    # Normalize histogram input to a dict mapping histogram names to properties
+    histogram_props = {}
     if isinstance(histograms_input, list):
-        histogram_list = histograms_input
-        histogram_props = {}
+        for item in histograms_input:
+            if isinstance(item, str):
+                histogram_props[item] = {}
+            elif isinstance(item, dict):
+                # Item is like {"metric.name": {"aggregate": "sum"}}
+                for name, props in item.items():
+                    histogram_props[name] = props if props else {}
     elif isinstance(histograms_input, dict):
-        histogram_list = list(histograms_input.keys())
         histogram_props = histograms_input
-    else:
-        histogram_list = []
-        histogram_props = {}
 
     config["histograms"] = {}
-    for i, hist in enumerate(histogram_list):
+    for hist in histogram_props:
         config["histograms"][hist] = {}
-
-        if hist in histogram_props and isinstance(histogram_props[hist], dict):
+        if isinstance(histogram_props[hist], dict):
             config["histograms"][hist].update(histogram_props[hist])
 
         hist_name = hist.split(".")[-1]
@@ -234,6 +236,40 @@ def annotateHistograms(config: Dict[str, Any], probeIndex: Dict[str, Any]) -> No
                 # Copy memory unit for memory distributions
                 if schema["type"] == "memory_distribution" and "memory_unit" in schema:
                     config["histograms"][hist]["memory_unit"] = schema["memory_unit"]
+            elif schema["type"] == "labeled_counter":
+                config["histograms"][hist]["distribution_type"] = schema["type"]
+                if "labels" in schema:
+                    config["histograms"][hist]["labels"] = schema["labels"]
+
+                # Detect unit: check schema first, then infer from metric name
+                if "unit" in schema:
+                    config["histograms"][hist]["unit"] = schema["unit"]
+                elif hist.endswith("_ms"):
+                    config["histograms"][hist]["unit"] = "ms"
+                elif hist.endswith("_s"):
+                    config["histograms"][hist]["unit"] = "s"
+
+                # Require aggregate field for labeled_counter metrics
+                if "aggregate" not in config["histograms"][hist]:
+                    print(f"ERROR: labeled_counter metric '{hist}' requires an 'aggregate' field.")
+                    print(f"  Specify 'aggregate: sum' (totals) or 'aggregate: percentiles' (median/p75/p95).")
+                    print(f"  Example in config:")
+                    print(f"    histograms:")
+                    print(f"      - {hist}:")
+                    print(f"          aggregate: sum  # or 'histogram'")
+                    sys.exit(1)
+
+                aggregate = config["histograms"][hist]["aggregate"]
+                if aggregate not in ["sum", "percentiles"]:
+                    print(f"ERROR: Invalid aggregate value '{aggregate}' for '{hist}'.")
+                    print(f"  Must be 'sum' or 'percentiles'.")
+                    sys.exit(1)
+
+                if aggregate == "sum":
+                    config["histograms"][hist]["kind"] = "categorical"
+                else:
+                    # percentiles mode: calculate median, p75, p95 per label
+                    config["histograms"][hist]["kind"] = "labeled_percentiles"
             else:
                 type = schema["type"]
                 print(f"ERROR: Type {type} for {hist_name} not currently supported.")
@@ -304,6 +340,40 @@ def annotateHistograms(config: Dict[str, Any], probeIndex: Dict[str, Any]) -> No
                 # Copy memory unit for memory distributions
                 if schema["type"] == "memory_distribution" and "memory_unit" in schema:
                     config["histograms"][hist]["memory_unit"] = schema["memory_unit"]
+            elif schema["type"] == "labeled_counter":
+                config["histograms"][hist]["distribution_type"] = schema["type"]
+                if "labels" in schema:
+                    config["histograms"][hist]["labels"] = schema["labels"]
+
+                # Detect unit: check schema first, then infer from metric name
+                if "unit" in schema:
+                    config["histograms"][hist]["unit"] = schema["unit"]
+                elif hist.endswith("_ms"):
+                    config["histograms"][hist]["unit"] = "ms"
+                elif hist.endswith("_s"):
+                    config["histograms"][hist]["unit"] = "s"
+
+                # Require aggregate field for labeled_counter metrics
+                if "aggregate" not in config["histograms"][hist]:
+                    print(f"ERROR: labeled_counter metric '{hist}' requires an 'aggregate' field.")
+                    print(f"  Specify 'aggregate: sum' (totals) or 'aggregate: percentiles' (median/p75/p95).")
+                    print(f"  Example in config:")
+                    print(f"    histograms:")
+                    print(f"      - {hist}:")
+                    print(f"          aggregate: sum  # or 'histogram'")
+                    sys.exit(1)
+
+                aggregate = config["histograms"][hist]["aggregate"]
+                if aggregate not in ["sum", "percentiles"]:
+                    print(f"ERROR: Invalid aggregate value '{aggregate}' for '{hist}'.")
+                    print(f"  Must be 'sum' or 'percentiles'.")
+                    sys.exit(1)
+
+                if aggregate == "sum":
+                    config["histograms"][hist]["kind"] = "categorical"
+                else:
+                    # percentiles mode: calculate median, p75, p95 per label
+                    config["histograms"][hist]["kind"] = "labeled_percentiles"
             else:
                 type = schema["type"]
                 print(f"ERROR: Type {type} for {hist_name} not currently supported.")

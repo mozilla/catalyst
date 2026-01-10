@@ -4,7 +4,7 @@
 # Example usage:
 # 1. Copy template: cp configs/template.yaml configs/my-experiment.yaml
 # 2. Edit the configuration values below
-# 3. Generate report: just generate-perf-report --config configs/my-experiment.yaml
+# 3. Generate report: just run configs/my-experiment.yaml
 # 4. Generated reports will be saved to reports/{slug}.html
 
 # Experiment identifier (required)
@@ -39,6 +39,16 @@ histograms:
   # Gfx
   - metrics.timing_distribution.gfx_composite_time
   - metrics.timing_distribution.gfx_content_paint_time
+
+  # Labeled counter examples (require aggregate field):
+
+  # Example 1: CPU time per process type - use 'percentiles' to see median, p75, p95
+  # - metrics.labeled_counter.power_cpu_time_per_process_type_ms:
+  #     aggregate: percentiles
+
+  # Example 2: GC event counter - use 'sum' to see total count of events per label
+  # - metrics.labeled_counter.javascript_gc_slice_was_long:
+  #     aggregate: sum
 
 # Event metrics to analyze (optional)
 events:

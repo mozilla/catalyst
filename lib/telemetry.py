@@ -453,6 +453,9 @@ class TelemetryClient:
         crash_event_metrics=None,
     ):
         for histogram in self.config["histograms"]:
+            # Skip labeled_percentiles metrics - they're processed separately
+            if self.config["histograms"][histogram].get("kind") == "labeled_percentiles":
+                continue
             df = histograms[histogram]
             if segment == "All":
                 subset = (
@@ -482,28 +485,26 @@ class TelemetryClient:
 
             # Add labels to the buckets for categorical histograms.
             if self.config["histograms"][histogram]["kind"] == "categorical":
-                labels = self.config["histograms"][histogram]["labels"]
+                labels = self.config["histograms"][histogram].get("labels")
 
-                # Remove overflow bucket if it exists
-                if len(labels) == (len(buckets) - 1) and counts[-1] == 0:
-                    del buckets[-1]
-                    del counts[-1]
+                if labels:
+                    # Remove overflow bucket if it exists
+                    if len(labels) == (len(buckets) - 1) and counts[-1] == 0:
+                        del buckets[-1]
+                        del counts[-1]
 
-                # Add missing buckets so they line up in each branch.
-                if len(labels) > len(buckets):
-                    for i in range(len(buckets)):
-                        print(buckets[i], counts[i])
+                    # Create a bucket->count mapping from query results
+                    bucket_to_count = dict(zip(buckets, counts))
+
+                    # Remap counts to match label order, filling missing labels with 0
                     new_counts = []
-                    for i, b in enumerate(labels):
-                        j = buckets.index(b) if b in buckets else None
-                        if j:
-                            new_counts.append(counts[j])
-                        else:
-                            new_counts.append(0)
+                    for label in labels:
+                        new_counts.append(bucket_to_count.get(label, 0))
                     counts = new_counts
 
-                # Remap bucket values to the appropriate label names.
-                buckets = labels
+                    # Use labels as bucket names
+                    buckets = labels
+                # else: for labeled_counter without predefined labels, use data labels as-is
 
             # If there is a max, then overflow larger buckets into the max.
             if "max" in self.config["histograms"][histogram]:
@@ -635,9 +636,19 @@ class TelemetryClient:
             crash_event_metrics[metric] = self.getCrashEventData(metric)
             print(f"Crash event data for {metric}: {crash_event_metrics[metric]}")
 
-        # Get data for each histogram in this segment.
+        # Separate regular histograms from labeled_percentiles metrics
+        regular_histograms = {}
+        labeled_percentiles = {}
+        for hist in self.config["histograms"]:
+            kind = self.config["histograms"][hist].get("kind")
+            if kind == "labeled_percentiles":
+                labeled_percentiles[hist] = self.config["histograms"][hist]
+            else:
+                regular_histograms[hist] = self.config["histograms"][hist]
+
+        # Get data for regular histograms
         histograms, remove = self._processHistogramsInParallel(
-            self.config["histograms"], is_experiment=True
+            regular_histograms, is_experiment=True
         )
 
         # Remove invalid histogram data.
@@ -645,6 +656,14 @@ class TelemetryClient:
             if hist in self.config["histograms"]:
                 print(f"Empty dataset found, removing: {hist}.")
                 del self.config["histograms"][hist]
+
+        # Get data for labeled_percentiles metrics
+        labeled_percentiles_data = {}
+        for hist in labeled_percentiles:
+            print(f"Fetching labeled percentiles data for: {hist}")
+            df = self.getLabeledPercentilesData(self.config, hist)
+            if df is not None and not df.empty:
+                labeled_percentiles_data[hist] = df
 
         # Combine histogram and pageload event results.
         results = {}
@@ -670,6 +689,14 @@ class TelemetryClient:
                     event_metrics,
                     histograms,
                     crash_event_metrics,
+                )
+
+                # Process labeled_percentiles data
+                self.collectLabeledPercentilesResults(
+                    results,
+                    branch_name,
+                    segment,
+                    labeled_percentiles_data,
                 )
 
         results["queries"] = self.queries
@@ -829,6 +856,28 @@ class TelemetryClient:
         # Remove empty lines before returning
         query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
         self.queries.append({"name": f"Histogram: {histogram}", "query": query})
+        return query
+
+    def generateLabeledHistogramQuery_OS_segments_glean(self, histogram):
+        t = get_template("experiment/glean/labeled_histogram_os_segments.sql")
+
+        context = {
+            "slug": self.config["slug"],
+            "channel": self.config["channel"],
+            "startDate": self.config["startDate"],
+            "endDate": self.config["endDate"],
+            "histogram": histogram,
+            "available_on_desktop": self.config["histograms"][histogram][
+                "available_on_desktop"
+            ],
+            "available_on_android": self.config["histograms"][histogram][
+                "available_on_android"
+            ],
+            "single_os_filter": self._get_single_os_filter(),
+        }
+        query = t.render(context)
+        query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
+        self.queries.append({"name": f"Labeled Histogram: {histogram}", "query": query})
         return query
 
     def generateHistogramQuery_OS_segments_non_experiment_legacy(self, histogram):
@@ -1085,6 +1134,113 @@ class TelemetryClient:
         print(f"Writing '{slug}' histogram results for {histogram} to disk.")
         df.to_pickle(filename)
         return df
+
+    def getLabeledHistogramData(self, config, histogram):
+        slug = config["slug"]
+        hist_name = histogram.split(".")[-1]
+        filename = os.path.join(self.dataDir, f"{slug}-{hist_name}-labeled.pkl")
+
+        df = self.checkForExistingData(filename)
+        if df is not None:
+            return df
+
+        if segments_are_all_OS(self.config["segments"]):
+            query = self.generateLabeledHistogramQuery_OS_segments_glean(histogram)
+        else:
+            print("No current support for generic non-experiment queries.")
+            sys.exit(1)
+
+        print("Running query:\n" + query)
+        job = self.client.query(query)
+        df = job.to_dataframe()
+
+        print(f"Writing '{slug}' labeled histogram results for {histogram} to disk.")
+        df.to_pickle(filename)
+        return df
+
+    def generateLabeledPercentilesQuery_OS_segments_glean(self, histogram):
+        t = get_template("experiment/glean/labeled_percentiles_os_segments.sql")
+
+        context = {
+            "slug": self.config["slug"],
+            "channel": self.config["channel"],
+            "startDate": self.config["startDate"],
+            "endDate": self.config["endDate"],
+            "histogram": histogram,
+            "available_on_desktop": self.config["histograms"][histogram][
+                "available_on_desktop"
+            ],
+            "available_on_android": self.config["histograms"][histogram][
+                "available_on_android"
+            ],
+            "single_os_filter": self._get_single_os_filter(),
+        }
+        query = t.render(context)
+        query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
+        self.queries.append({"name": f"Labeled Percentiles: {histogram}", "query": query})
+        return query
+
+    def getLabeledPercentilesData(self, config, histogram):
+        slug = config["slug"]
+        hist_name = histogram.split(".")[-1]
+        filename = os.path.join(self.dataDir, f"{slug}-{hist_name}-percentiles.pkl")
+
+        df = self.checkForExistingData(filename)
+        if df is not None:
+            return df
+
+        if segments_are_all_OS(self.config["segments"]):
+            query = self.generateLabeledPercentilesQuery_OS_segments_glean(histogram)
+        else:
+            print("No current support for generic non-experiment queries.")
+            sys.exit(1)
+
+        print("Running query:\n" + query)
+        job = self.client.query(query)
+        df = job.to_dataframe()
+
+        print(f"Writing '{slug}' labeled percentiles results for {histogram} to disk.")
+        df.to_pickle(filename)
+        return df
+
+    def collectLabeledPercentilesResults(
+        self,
+        results,
+        branch,
+        segment,
+        labeled_percentiles_data,
+    ):
+        """Process labeled_percentiles data and store median, p75, p95 for each label."""
+        for histogram, df in labeled_percentiles_data.items():
+            # Filter data for this branch and segment
+            if segment == "All":
+                subset = df[df["branch"] == branch]
+            else:
+                subset = df[(df["segment"] == segment) & (df["branch"] == branch)]
+
+            if subset.empty:
+                continue
+
+            # Extract labels and percentiles
+            labels = list(subset["label"])
+            medians = [float(x) for x in subset["median"]]
+            p75s = [float(x) for x in subset["p75"]]
+            p95s = [float(x) for x in subset["p95"]]
+            counts = [int(x) for x in subset["sample_count"]]
+
+            # Store in results
+            hist_name = histogram.split(".")[-1]
+            results[branch][segment]["histograms"][histogram] = {
+                "labels": labels,
+                "medians": medians,
+                "p75s": p75s,
+                "p95s": p95s,
+                "counts": counts,
+            }
+
+            print(
+                f"    segment={segment} labeled percentiles: {hist_name} = {len(labels)} labels"
+            )
 
     def getPageloadEventDataNonExperiment(self, metric):
         slug = self.config["slug"]

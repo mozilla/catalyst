@@ -130,7 +130,7 @@
         </td>
     {% for data in metric.datasets %}
       <td style="{{data.style}}"><div style="{{data.color}};">{{data.branch}}</div></td>
-      <td style="{{data.style}}"><div style="{{data.color}};">{{data.uplift}}%</div></td>
+      <td style="{{data.style}}"><div style="{{data.color}};">{{data.uplift}}{% if not data.skip_percent %}%{% endif %}</div></td>
       <td style="{{data.style}}"><div style="{{data.color}};">{{data.effect}}</div></td>
       </tr>
       <tr>

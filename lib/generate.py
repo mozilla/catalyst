@@ -2,6 +2,7 @@
 import json
 import os
 import time
+from decimal import Decimal
 import numpy as np
 import django
 from django.apps import apps
@@ -20,6 +21,8 @@ class NpEncoder(json.JSONEncoder):
             return float(obj)
         if isinstance(obj, np.ndarray):
             return obj.tolist()
+        if isinstance(obj, Decimal):
+            return float(obj)
         return super(NpEncoder, self).default(obj)
 
 
@@ -147,6 +150,7 @@ def transformTelemetryDataByType(telemetryData, config):
         "numerical": [],
         "categorical": [],
         "scalar": [],
+        "labeled_percentiles": [],
         "queries": telemetryData.get("queries", {}),  # Preserve queries
     }
 
@@ -155,8 +159,16 @@ def transformTelemetryDataByType(telemetryData, config):
             # Transform numerical histograms
             for hist in config.get("histograms", {}):
                 if config["histograms"][hist]["kind"] == "numerical":
-                    # Use full histogram name as key, shortened name for display
-                    hist_name = hist.split(".")[-1]
+                    # For labeled histograms, use parent:label format
+                    # For regular histograms, use the last part of the name
+                    if "labeled_histogram_label" in config["histograms"][hist]:
+                        parent = config["histograms"][hist]["labeled_histogram_parent"]
+                        label = config["histograms"][hist]["labeled_histogram_label"]
+                        parent_short = parent.split(".")[-1]
+                        hist_name = f"{parent_short}:{label}"
+                    else:
+                        hist_name = hist.split(".")[-1]
+
                     if hist in telemetryData.get(branch, {}).get(segment, {}).get(
                         "histograms", {}
                     ):
@@ -194,6 +206,28 @@ def transformTelemetryDataByType(telemetryData, config):
                             "categorical",
                         ):
                             transformedData["categorical"].append(
+                                {
+                                    "branch": branch,
+                                    "segment": segment,
+                                    "metric_name": hist_name,
+                                    "source_section": "histograms",
+                                    "source_key": hist,
+                                    "config": config["histograms"][hist],
+                                    "data": data,
+                                }
+                            )
+
+            # Transform labeled_percentiles histograms
+            for hist in config.get("histograms", {}):
+                if config["histograms"][hist]["kind"] == "labeled_percentiles":
+                    hist_name = hist.split(".")[-1]
+                    if hist in telemetryData.get(branch, {}).get(segment, {}).get(
+                        "histograms", {}
+                    ):
+                        data = telemetryData[branch][segment]["histograms"][hist]
+                        # labeled_percentiles data has medians/p75s/p95s/counts
+                        if data.get("medians") and len(data["medians"]) > 0:
+                            transformedData["labeled_percentiles"].append(
                                 {
                                     "branch": branch,
                                     "segment": segment,

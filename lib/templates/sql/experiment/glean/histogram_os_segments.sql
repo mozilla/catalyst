@@ -7,12 +7,18 @@ desktop_data as (
         mozfun.map.get_key(ping_info.experiments, "{{slug}}").branch as branch,
         {% if distribution_type == "timing_distribution" %}
         CAST(key as INT64)/1000000 AS bucket,
+        {% elif distribution_type == "labeled_counter" %}
+        key AS bucket,
         {% else %}
         CAST(key as INT64) AS bucket,
         {% endif %}
         value as count
     FROM `mozdata.firefox_desktop.metrics` as d
+      {% if distribution_type == "labeled_counter" %}
+      CROSS JOIN UNNEST(d.{{histogram}})
+      {% else %}
       CROSS JOIN UNNEST(d.{{histogram}}.values)
+      {% endif %}
     WHERE
       DATE(submission_timestamp) >= DATE('{{startDate}}')
       AND DATE(submission_timestamp) <= DATE('{{endDate}}')
@@ -41,12 +47,18 @@ android_data as (
         mozfun.map.get_key(ping_info.experiments, "{{slug}}").branch as branch,
         {% if distribution_type == "timing_distribution" %}
         CAST(key as INT64)/1000000 AS bucket,
+        {% elif distribution_type == "labeled_counter" %}
+        key AS bucket,
         {% else %}
         CAST(key as INT64) AS bucket,
         {% endif %}
         value as count
     FROM `mozdata.fenix.metrics` as f
+      {% if distribution_type == "labeled_counter" %}
+      CROSS JOIN UNNEST(f.{{histogram}})
+      {% else %}
       CROSS JOIN UNNEST(f.{{histogram}}.values)
+      {% endif %}
     WHERE
       DATE(submission_timestamp) >= DATE('{{startDate}}')
       AND DATE(submission_timestamp) <= DATE('{{endDate}}')
@@ -75,12 +87,18 @@ android_data as (
         "non-enrolled" as branch,
         {% if distribution_type == "timing_distribution" %}
         CAST(key as INT64)/1000000 AS bucket,
+        {% elif distribution_type == "labeled_counter" %}
+        key AS bucket,
         {% else %}
         CAST(key as INT64) AS bucket,
         {% endif %}
         value as count
     FROM `mozdata.firefox_desktop.metrics` as d
+      {% if distribution_type == "labeled_counter" %}
+      CROSS JOIN UNNEST(d.{{histogram}})
+      {% else %}
       CROSS JOIN UNNEST(d.{{histogram}}.values)
+      {% endif %}
     WHERE
       DATE(submission_timestamp) >= DATE('{{startDate}}')
       AND DATE(submission_timestamp) <= DATE('{{endDate}}')
@@ -108,12 +126,18 @@ android_data_non_enrolled as (
         "non-enrolled" as branch,
         {% if distribution_type == "timing_distribution" %}
         CAST(key as INT64)/1000000 AS bucket,
+        {% elif distribution_type == "labeled_counter" %}
+        key AS bucket,
         {% else %}
         CAST(key as INT64) AS bucket,
         {% endif %}
         value as count
     FROM `mozdata.fenix.metrics` as f
+      {% if distribution_type == "labeled_counter" %}
+      CROSS JOIN UNNEST(f.{{histogram}})
+      {% else %}
       CROSS JOIN UNNEST(f.{{histogram}}.values)
+      {% endif %}
     WHERE
       DATE(submission_timestamp) >= DATE('{{startDate}}')
       AND DATE(submission_timestamp) <= DATE('{{endDate}}')

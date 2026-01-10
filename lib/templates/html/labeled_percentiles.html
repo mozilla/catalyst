@@ -1,0 +1,116 @@
+{% autoescape off %}
+<div class="chart"><canvas height="400px" id="{{segment}}-{{metric}}-labeled-percentiles"></canvas></div>
+<script>
+  ctx = document.getElementById('{{segment}}-{{metric}}-labeled-percentiles');
+
+
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: {{labels}},
+      datasets: [
+{% for dataset in datasets %}
+        {
+          label: "{{dataset.branch}} - median",
+          data: {{dataset.medians}},
+        },
+{% endfor %}
+      ]
+    },
+    options: {
+      animation: false,
+      maintainAspectRatio: false,
+      responsive: true,
+      plugins: {
+          datalabels: { display: false },
+          legend: {
+              display: true,
+              position: 'top',
+            },
+          title: {
+              display: true,
+              text: ["{{metric}} (Percentiles{% if unit %} - {{unit}}{% endif %})", "segment: {{segment}}"]
+            },
+      },
+      scales: {
+        y: {
+          grace: '10%',
+          beginAtZero: true,
+          title: {
+            text: "Value{% if unit %} ({{unit}}){% endif %}",
+            display: true
+          }
+        },
+        x: {
+          type: "category",
+        }
+      },
+    }
+  });
+</script>
+
+<div style="margin-top: 20px;">
+  <h4 style="margin-bottom: 10px; color: #333;">Per-Label Percentiles</h4>
+{% for row in table_rows %}
+  <div style="margin-bottom: 20px;">
+    <h5 style="margin: 5px 0; color: #555; font-weight: bold;">{{row.label}}</h5>
+    <table border="1" cellpadding="0" cellspacing="0" class="stat-table" style="table-layout: fixed; width: 100%;">
+      <colgroup>
+        <col style="width: 20%;">
+        <col style="width: 10%;">
+        <col style="width: 12%;">
+        <col style="width: 12%;">
+        <col style="width: 12%;">
+        <col style="width: 11%;">
+        <col style="width: 12%;">
+        <col style="width: 11%;">
+      </colgroup>
+      <thead>
+        <tr>
+          <th style="font-size: 13px; padding: 8px;">Branch</th>
+          <th style="font-size: 13px; padding: 8px;">N</th>
+          <th style="font-size: 13px; padding: 8px;">Median{% if unit %} ({{unit}}){% endif %}</th>
+          <th style="font-size: 13px; padding: 8px;">Median<br>Uplift (%)</th>
+          <th style="font-size: 13px; padding: 8px;">p75{% if unit %} ({{unit}}){% endif %}</th>
+          <th style="font-size: 13px; padding: 8px;">p75<br>Uplift (%)</th>
+          <th style="font-size: 13px; padding: 8px;">p95{% if unit %} ({{unit}}){% endif %}</th>
+          <th style="font-size: 13px; padding: 8px;">p95<br>Uplift (%)</th>
+        </tr>
+      </thead>
+      <tbody>
+{% for branch_row in row.branch_rows %}
+        <tr style="background-color: {% if forloop.counter0|divisibleby:2 %}#f9f9f9{% else %}#ffffff{% endif %};">
+          <td style="text-align: left; padding: 6px; font-size: 13px;">{{branch_row.branch_name}}</td>
+          <td style="padding: 6px; font-size: 13px;">{{branch_row.n}}</td>
+          <td style="padding: 6px; font-size: 13px;">{{branch_row.median}}</td>
+          <td style="padding: 6px; font-size: 13px;{% if branch_row.median_uplift is not none and branch_row.median_uplift >= 10 %} background-color: #ffcdd2; color: #c62828;{% elif branch_row.median_uplift is not none and branch_row.median_uplift <= -10 %} background-color: #c8e6c9; color: #2e7d32;{% endif %}">
+{% if branch_row.median_uplift is not none %}
+            {{branch_row.median_uplift|floatformat:2}}%
+{% else %}
+            -
+{% endif %}
+          </td>
+          <td style="padding: 6px; font-size: 13px;">{{branch_row.p75}}</td>
+          <td style="padding: 6px; font-size: 13px;{% if branch_row.p75_uplift is not none and branch_row.p75_uplift >= 10 %} background-color: #ffcdd2; color: #c62828;{% elif branch_row.p75_uplift is not none and branch_row.p75_uplift <= -10 %} background-color: #c8e6c9; color: #2e7d32;{% endif %}">
+{% if branch_row.p75_uplift is not none %}
+            {{branch_row.p75_uplift|floatformat:2}}%
+{% else %}
+            -
+{% endif %}
+          </td>
+          <td style="padding: 6px; font-size: 13px;">{{branch_row.p95}}</td>
+          <td style="padding: 6px; font-size: 13px;{% if branch_row.p95_uplift is not none and branch_row.p95_uplift >= 10 %} background-color: #ffcdd2; color: #c62828;{% elif branch_row.p95_uplift is not none and branch_row.p95_uplift <= -10 %} background-color: #c8e6c9; color: #2e7d32;{% endif %}">
+{% if branch_row.p95_uplift is not none %}
+            {{branch_row.p95_uplift|floatformat:2}}%
+{% else %}
+            -
+{% endif %}
+          </td>
+        </tr>
+{% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endfor %}
+</div>
+{% endautoescape %}

@@ -15,6 +15,9 @@
 {% for metric in segment.categorical_metrics %}
           <li><a href="#{{segment.name}}-{{metric}}">{{metric}}</a></li>
 {% endfor %}
+{% for metric in segment.labeled_percentiles_metrics %}
+          <li><a href="#{{segment.name}}-{{metric}}">{{metric}}</a></li>
+{% endfor %}
 {% for metric in segment.scalar_metrics %}
           <li><a href="#{{segment.name}}-{{metric}}">{{metric}}</a></li>
 {% endfor %}
