@@ -1,0 +1,50 @@
+# Experiment Configuration
+
+slug: performance-metric-calibration-release-143
+
+# Target segments/platforms
+segments:
+  - Windows
+  - Linux
+  - Mac
+
+# Histogram metrics to analyze
+histograms:
+  # Memory
+  - metrics.memory_distribution.memory_total
+
+  # CPU time per process type
+  - metrics.labeled_counter.power_cpu_time_per_process_type_ms:
+      aggregate: percentiles
+
+  # Page load metrics
+  - metrics.timing_distribution.performance_pageload_fcp
+  - metrics.timing_distribution.performance_time_response_start
+  - metrics.timing_distribution.performance_pageload_load_time
+  - metrics.timing_distribution.perf_largest_contentful_paint
+  - metrics.timing_distribution.layout_time_to_first_interaction
+
+  # GFX frame rate (quantity metric)
+  - metrics.quantity.gfx_target_frame_rate:
+      aggregate: percentiles
+
+  # Scroll latency
+  - metrics.timing_distribution.gfx_scroll_present_latency
+
+# Event metrics to analyze
+events:
+  # Crash events
+  - crash
+
+  # Pageload events
+  - pageload:
+      fcp_time:
+        max: 30000
+      lcp_time:
+        max: 30000
+      load_time:
+        max: 30000
+      response_time:
+        max: 30000
+      js_exec_time:
+        max: 30000
