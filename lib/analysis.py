@@ -307,6 +307,7 @@ def createResultsTemplate(config):
                 "categorical": {},
                 "scalar": {},
                 "labeled_percentiles": {},
+                "quantity_percentiles": {},
             }
     return template
 
@@ -336,6 +337,7 @@ class DataAnalyzer:
         self.processCategoricalMetrics(transformedData["categorical"])
         self.processScalarMetrics(transformedData["scalar"])
         self.processLabeledPercentilesMetrics(transformedData.get("labeled_percentiles", []))
+        self.processQuantityPercentilesMetrics(transformedData.get("quantity_percentiles", []))
 
         return self.results
 
@@ -587,3 +589,55 @@ class DataAnalyzer:
                     result_location["median_uplifts"] = median_uplifts
                     result_location["p75_uplifts"] = p75_uplifts
                     result_location["p95_uplifts"] = p95_uplifts
+
+    def processQuantityPercentilesMetrics(self, quantity_percentiles_metrics):
+        """Process all quantity_percentiles metrics - median, p75, p95 for scalar quantities."""
+        print(f"Processing {len(quantity_percentiles_metrics)} quantity_percentiles metrics")
+
+        for metric_data in quantity_percentiles_metrics:
+            branch = metric_data["branch"]
+            segment = metric_data["segment"]
+            metric_name = metric_data["metric_name"]
+            source_section = metric_data["source_section"]
+            config = metric_data["config"]
+            data = metric_data["data"]
+
+            print(f"  {branch}/{segment}: {source_section}.{metric_name}")
+
+            # Store in results structure
+            if metric_name not in self.results[branch][segment]["quantity_percentiles"]:
+                self.results[branch][segment]["quantity_percentiles"][metric_name] = {
+                    "desc": config.get("desc", f"{metric_name}"),
+                    "median": 0,
+                    "p75": 0,
+                    "p95": 0,
+                    "sum": 0,
+                    "count": 0,
+                }
+            result_location = self.results[branch][segment]["quantity_percentiles"][metric_name]
+
+            # Store the data
+            result_location["median"] = data["median"]
+            result_location["p75"] = data["p75"]
+            result_location["p95"] = data["p95"]
+            result_location["sum"] = data["sum"]
+            result_location["count"] = data["count"]
+
+            # Calculate uplift for non-control branches
+            if branch != self.control:
+                if metric_name in self.results[self.control][segment]["quantity_percentiles"]:
+                    control_result = self.results[self.control][segment]["quantity_percentiles"][metric_name]
+                    control_median = control_result["median"]
+                    control_p75 = control_result["p75"]
+                    control_p95 = control_result["p95"]
+                    control_sum = control_result["sum"]
+
+                    # Calculate uplifts for each percentile
+                    if control_median > 0:
+                        result_location["median_uplift"] = ((data["median"] - control_median) / control_median) * 100
+                    if control_p75 > 0:
+                        result_location["p75_uplift"] = ((data["p75"] - control_p75) / control_p75) * 100
+                    if control_p95 > 0:
+                        result_location["p95_uplift"] = ((data["p95"] - control_p95) / control_p95) * 100
+                    if control_sum > 0:
+                        result_location["sum_uplift"] = ((data["sum"] - control_sum) / control_sum) * 100

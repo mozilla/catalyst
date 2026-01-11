@@ -1,0 +1,60 @@
+{% autoescape off %}
+<div style="margin-top: 20px;">
+  <h4 style="margin-bottom: 10px; color: #333;">{{metric}}</h4>
+  <table border="1" cellpadding="0" cellspacing="0" class="stat-table" style="table-layout: fixed; width: 100%;">
+    <colgroup>
+      <col style="width: 20%;">
+      <col style="width: 12%;">
+      <col style="width: 15%;">
+      <col style="width: 11%;">
+      <col style="width: 15%;">
+      <col style="width: 11%;">
+      <col style="width: 16%;">
+    </colgroup>
+    <thead>
+      <tr>
+        <th style="font-size: 13px; padding: 8px;">Branch</th>
+        <th style="font-size: 13px; padding: 8px;">N</th>
+        <th style="font-size: 13px; padding: 8px;">Median{% if unit %} ({{unit}}){% endif %}</th>
+        <th style="font-size: 13px; padding: 8px;">Median<br>Uplift (%)</th>
+        <th style="font-size: 13px; padding: 8px;">p75{% if unit %} ({{unit}}){% endif %}</th>
+        <th style="font-size: 13px; padding: 8px;">p75<br>Uplift (%)</th>
+        <th style="font-size: 13px; padding: 8px;">p95{% if unit %} ({{unit}}){% endif %}</th>
+        <th style="font-size: 13px; padding: 8px;">p95<br>Uplift (%)</th>
+      </tr>
+    </thead>
+    <tbody>
+{% for row in branch_rows %}
+      <tr style="background-color: {% if forloop.counter0|divisibleby:2 %}#f9f9f9{% else %}#ffffff{% endif %};">
+        <td style="text-align: left; padding: 6px; font-size: 13px;">{{row.branch_name}}</td>
+        <td style="padding: 6px; font-size: 13px;">{{row.n}}</td>
+        <td style="padding: 6px; font-size: 13px;">{{row.median}}</td>
+        <td style="padding: 6px; font-size: 13px;{% if row.median_uplift is not none and row.median_uplift >= 10 %} background-color: #ffcdd2; color: #c62828;{% elif row.median_uplift is not none and row.median_uplift <= -10 %} background-color: #c8e6c9; color: #2e7d32;{% endif %}">
+{% if row.median_uplift is not none %}
+          {{row.median_uplift|floatformat:2}}%
+{% else %}
+          -
+{% endif %}
+        </td>
+        <td style="padding: 6px; font-size: 13px;">{{row.p75}}</td>
+        <td style="padding: 6px; font-size: 13px;{% if row.p75_uplift is not none and row.p75_uplift >= 10 %} background-color: #ffcdd2; color: #c62828;{% elif row.p75_uplift is not none and row.p75_uplift <= -10 %} background-color: #c8e6c9; color: #2e7d32;{% endif %}">
+{% if row.p75_uplift is not none %}
+          {{row.p75_uplift|floatformat:2}}%
+{% else %}
+          -
+{% endif %}
+        </td>
+        <td style="padding: 6px; font-size: 13px;">{{row.p95}}</td>
+        <td style="padding: 6px; font-size: 13px;{% if row.p95_uplift is not none and row.p95_uplift >= 10 %} background-color: #ffcdd2; color: #c62828;{% elif row.p95_uplift is not none and row.p95_uplift <= -10 %} background-color: #c8e6c9; color: #2e7d32;{% endif %}">
+{% if row.p95_uplift is not none %}
+          {{row.p95_uplift|floatformat:2}}%
+{% else %}
+          -
+{% endif %}
+        </td>
+      </tr>
+{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endautoescape %}

@@ -123,14 +123,15 @@ class ReportGenerator:
                 "categorical_metrics": [],
                 "scalar_metrics": [],
                 "labeled_percentiles_metrics": [],
+                "quantity_percentiles_metrics": [],
             }
 
             # Collect metrics from all branches for this segment
-            all_metrics = {"numerical": set(), "categorical": set(), "scalar": set(), "labeled_percentiles": set()}
+            all_metrics = {"numerical": set(), "categorical": set(), "scalar": set(), "labeled_percentiles": set(), "quantity_percentiles": set()}
             for branch in self.data["branches"]:
                 branch_name = branch["name"] if isinstance(branch, dict) else branch
                 if branch_name in self.data and segment in self.data[branch_name]:
-                    for data_type in ["numerical", "categorical", "scalar", "labeled_percentiles"]:
+                    for data_type in ["numerical", "categorical", "scalar", "labeled_percentiles", "quantity_percentiles"]:
                         if data_type in self.data[branch_name][segment]:
                             all_metrics[data_type].update(
                                 self.data[branch_name][segment][data_type].keys()
@@ -140,6 +141,7 @@ class ReportGenerator:
             entry["categorical_metrics"] = sorted(list(all_metrics["categorical"]))
             entry["scalar_metrics"] = sorted(list(all_metrics["scalar"]))
             entry["labeled_percentiles_metrics"] = sorted(list(all_metrics["labeled_percentiles"]))
+            entry["quantity_percentiles_metrics"] = sorted(list(all_metrics["quantity_percentiles"]))
 
             segments.append(entry)
 
@@ -159,7 +161,7 @@ class ReportGenerator:
             categorical_metrics = []
 
             # Process all data types
-            for data_type in ["numerical", "categorical", "scalar", "labeled_percentiles"]:
+            for data_type in ["numerical", "categorical", "scalar", "labeled_percentiles", "quantity_percentiles"]:
                 # Get all metrics for this data type across all branches
                 all_metrics = set()
                 for branch in self.data["branches"]:
@@ -464,6 +466,76 @@ class ReportGenerator:
                                 "datasets": datasets,
                                 "rowspan": len(datasets),
                                 "is_labeled_percentiles": True,
+                            })
+                        continue
+
+                    # Generate summary for quantity_percentiles metrics
+                    if data_type == "quantity_percentiles":
+                        datasets = []
+                        for branch in self.data["branches"]:
+                            branch_name = (
+                                branch["name"] if isinstance(branch, dict) else branch
+                            )
+                            if branch_name == control_name:
+                                continue
+
+                            if (
+                                branch_name in self.data
+                                and segment in self.data[branch_name]
+                                and data_type in self.data[branch_name][segment]
+                                and metric in self.data[branch_name][segment][data_type]
+                            ):
+                                metric_data = self.data[branch_name][segment][data_type][metric]
+
+                                # Use median uplift for summary
+                                if "median_uplift" in metric_data:
+                                    median_uplift = metric_data["median_uplift"]
+
+                                    uplift_str = (
+                                        f"+{median_uplift:.1f}" if median_uplift > 0 else f"{median_uplift:.1f}"
+                                    )
+
+                                    # Determine effect size based on uplift magnitude
+                                    if abs(median_uplift) >= 10:
+                                        effect_meaning = "Large"
+                                    elif abs(median_uplift) >= 5:
+                                        effect_meaning = "Medium"
+                                    elif abs(median_uplift) >= 2:
+                                        effect_meaning = "Small"
+                                    else:
+                                        effect_meaning = "None"
+
+                                    datasets.append({
+                                        "branch": branch_name,
+                                        "uplift": f"{uplift_str}% (median)",
+                                        "effect": effect_meaning,
+                                        "style": f"background:{row_background};border-bottom-style:solid;",
+                                        "skip_percent": True,  # Don't add % in template
+                                    })
+
+                        if datasets:
+                            # Get description
+                            desc = f"Quantity percentiles: {metric}"
+                            for branch in self.data["branches"]:
+                                branch_name = (
+                                    branch["name"] if isinstance(branch, dict) else branch
+                                )
+                                if (
+                                    branch_name in self.data
+                                    and segment in self.data[branch_name]
+                                    and data_type in self.data[branch_name][segment]
+                                    and metric in self.data[branch_name][segment][data_type]
+                                ):
+                                    desc = self.data[branch_name][segment][data_type][metric].get("desc", f"Quantity percentiles: {metric}")
+                                    break
+
+                            numerical_metrics.append({
+                                "name": metric_name,
+                                "desc": desc,
+                                "style": f"background:{row_background}; border-bottom-style:solid; border-right-style:solid;",
+                                "datasets": datasets,
+                                "rowspan": len(datasets),
+                                "is_quantity_percentiles": True,
                             })
                         continue
 
@@ -1140,19 +1212,19 @@ class ReportGenerator:
     def createDataTypeMetrics(self, segment):
         """Create metrics organized by data type rather than source section."""
         # Collect all metrics for this segment across all branches and data types
-        all_metrics = {"numerical": set(), "categorical": set(), "scalar": set(), "labeled_percentiles": set()}
+        all_metrics = {"numerical": set(), "categorical": set(), "scalar": set(), "labeled_percentiles": set(), "quantity_percentiles": set()}
 
         for branch in self.data["branches"]:
             branch_name = branch["name"] if isinstance(branch, dict) else branch
             if branch_name in self.data and segment in self.data[branch_name]:
-                for data_type in ["numerical", "categorical", "scalar", "labeled_percentiles"]:
+                for data_type in ["numerical", "categorical", "scalar", "labeled_percentiles", "quantity_percentiles"]:
                     if data_type in self.data[branch_name][segment]:
                         all_metrics[data_type].update(
                             self.data[branch_name][segment][data_type].keys()
                         )
 
         # Create charts for each data type
-        for data_type in ["numerical", "categorical", "scalar", "labeled_percentiles"]:
+        for data_type in ["numerical", "categorical", "scalar", "labeled_percentiles", "quantity_percentiles"]:
             sorted_metrics = sorted(all_metrics[data_type])
 
             # Group labeled histogram metrics by their parent
@@ -1203,6 +1275,9 @@ class ReportGenerator:
                     has_data = True
                     break
                 elif data_type == "labeled_percentiles" and len(metric_data.get("medians", [])) > 0:
+                    has_data = True
+                    break
+                elif data_type == "quantity_percentiles" and metric_data.get("count", 0) > 0:
                     has_data = True
                     break
 
@@ -1263,6 +1338,9 @@ class ReportGenerator:
             elif data_type == "labeled_percentiles":
                 # Create labeled percentiles charts
                 self.createLabeledPercentilesCharts(segment, metric)
+            elif data_type == "quantity_percentiles":
+                # Create quantity percentiles charts
+                self.createQuantityPercentilesCharts(segment, metric)
 
     def createNumericalCharts(self, segment, metric):
         """Create all charts for numerical metrics."""
@@ -1416,6 +1494,75 @@ class ReportGenerator:
             "segment": segment,
             "unit": unit,
         }
+        self.doc(t.render(context))
+
+    def createQuantityPercentilesCharts(self, segment, metric):
+        """Create charts for quantity_percentiles metrics (median, p75, p95)."""
+        self.createQuantityPercentilesComparison(segment, metric, "quantity_percentiles")
+
+    def createQuantityPercentilesComparison(self, segment, metric, metric_type):
+        """Create a table showing percentiles for quantity metrics."""
+        # Get unit from metric config if available
+        unit = ""
+        for hist_key in self.data.get("histograms", {}):
+            hist_name = hist_key.split(".")[-1]
+            if hist_name == metric:
+                unit = self.data["histograms"][hist_key].get("unit", "")
+                break
+
+        # Build table with branches as rows
+        branch_rows = []
+        control = self.data["branches"][0]
+        control_name = control["name"] if isinstance(control, dict) else control
+
+        for branch in self.data["branches"]:
+            branch_name = branch["name"] if isinstance(branch, dict) else branch
+            if metric not in self.data[branch_name][segment][metric_type]:
+                continue
+
+            metric_data = self.data[branch_name][segment][metric_type][metric]
+
+            median = metric_data.get("median", 0)
+            p75 = metric_data.get("p75", 0)
+            p95 = metric_data.get("p95", 0)
+            count = metric_data.get("count", 0)
+
+            # Format values
+            if count >= 1000000:
+                count_display = f"{count / 1000000:.1f}M"
+            elif count >= 1000:
+                count_display = f"{count / 1000:.1f}K"
+            else:
+                count_display = f"{count:,}"
+            median_display = f"{median:,.2f}"
+            p75_display = f"{p75:,.2f}"
+            p95_display = f"{p95:,.2f}"
+
+            # Get uplifts (only for non-control branches)
+            median_uplift = metric_data.get("median_uplift") if branch_name != control_name else None
+            p75_uplift = metric_data.get("p75_uplift") if branch_name != control_name else None
+            p95_uplift = metric_data.get("p95_uplift") if branch_name != control_name else None
+
+            branch_rows.append({
+                "branch_name": branch_name,
+                "n": count_display,
+                "median": median_display,
+                "p75": p75_display,
+                "p95": p95_display,
+                "median_uplift": median_uplift,
+                "p75_uplift": p75_uplift,
+                "p95_uplift": p95_uplift,
+            })
+
+        context = {
+            "metric": metric,
+            "segment": segment,
+            "unit": unit,
+            "branch_rows": branch_rows,
+        }
+
+        # Render using a simple template (similar to scalar but with percentiles)
+        t = get_template("quantity_percentiles.html")
         self.doc(t.render(context))
 
     def createHistogramMetrics(self, segment):

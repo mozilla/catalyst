@@ -151,6 +151,7 @@ def transformTelemetryDataByType(telemetryData, config):
         "categorical": [],
         "scalar": [],
         "labeled_percentiles": [],
+        "quantity_percentiles": [],
         "queries": telemetryData.get("queries", {}),  # Preserve queries
     }
 
@@ -228,6 +229,28 @@ def transformTelemetryDataByType(telemetryData, config):
                         # labeled_percentiles data has medians/p75s/p95s/counts
                         if data.get("medians") and len(data["medians"]) > 0:
                             transformedData["labeled_percentiles"].append(
+                                {
+                                    "branch": branch,
+                                    "segment": segment,
+                                    "metric_name": hist_name,
+                                    "source_section": "histograms",
+                                    "source_key": hist,
+                                    "config": config["histograms"][hist],
+                                    "data": data,
+                                }
+                            )
+
+            # Transform quantity_percentiles histograms
+            for hist in config.get("histograms", {}):
+                if config["histograms"][hist]["kind"] == "quantity_percentiles":
+                    hist_name = hist.split(".")[-1]
+                    if hist in telemetryData.get(branch, {}).get(segment, {}).get(
+                        "histograms", {}
+                    ):
+                        data = telemetryData[branch][segment]["histograms"][hist]
+                        # quantity_percentiles data has median/p75/p95/sum/count
+                        if data.get("median") is not None:
+                            transformedData["quantity_percentiles"].append(
                                 {
                                     "branch": branch,
                                     "segment": segment,
