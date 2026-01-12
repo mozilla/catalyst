@@ -142,22 +142,21 @@ class TestFindLatestExperiment(unittest.TestCase):
         }
         self.assertFalse(is_supported_experiment(no_branches_exp))
 
-        # Test rollout with 100% population (should be rejected)
-        full_rollout_exp = {
+        # Test rollout (should be rejected - we don't trust non-enrolled as control)
+        rollout_exp = {
             "appName": "firefox_desktop",
             "branches": [{"slug": "rollout", "ratio": 1.0}],
             "isRollout": True,
         }
-        self.assertFalse(is_supported_experiment(full_rollout_exp))
+        self.assertFalse(is_supported_experiment(rollout_exp))
 
-        # Test single branch experiment (should convert to rollout)
+        # Test single branch experiment (should be rejected - no control)
         single_branch_exp = {
             "appName": "firefox_desktop",
             "branches": [{"slug": "treatment", "ratio": 0.5}],
             "isRollout": False,
         }
-        self.assertTrue(is_supported_experiment(single_branch_exp))
-        self.assertTrue(single_branch_exp["isRollout"])  # Should be converted
+        self.assertFalse(is_supported_experiment(single_branch_exp))
 
     def test_is_recent_experiment(self):
         """Test experiment recency filtering."""
@@ -210,7 +209,11 @@ class TestFindLatestExperiment(unittest.TestCase):
             "metrics.timing_distribution.performance_pageload_fcp",
             "metrics.timing_distribution.performance_pageload_load_time",
             "metrics.timing_distribution.perf_largest_contentful_paint",
-            {"metrics.labeled_counter.power_cpu_time_per_process_type_ms": {"aggregate": "percentiles"}},
+            {
+                "metrics.labeled_counter.power_cpu_time_per_process_type_ms": {
+                    "aggregate": "percentiles"
+                }
+            },
         ]
         self.assertEqual(histograms, expected_histograms)
 

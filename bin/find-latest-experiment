@@ -49,13 +49,14 @@ def is_supported_experiment(exp):
     print("--> no branches found.")
     return False
 
-  # If this is an experiment with only 1 branch, then pretend it's a rollout.
-  if not exp['isRollout'] and len(exp['branches']) == 1:
-    exp['isRollout'] = True
+  # Skip rollouts - we don't trust non-enrolled population as control
+  if exp['isRollout']:
+    print("--> rollout (skipping).")
+    return False
 
-  # Cannot generate a performance report for rollouts that use 100% of population.
-  if exp['isRollout'] and len(exp['branches']) == 1 and exp['branches'][0]['ratio'] >= 0.9:
-    print("--> no control population available.")
+  # If this is an experiment with only 1 branch, treat as unsupported
+  if len(exp['branches']) == 1:
+    print("--> single branch experiment (no control).")
     return False
 
   return True

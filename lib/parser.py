@@ -252,18 +252,22 @@ def annotateHistograms(config: Dict[str, Any], probeIndex: Dict[str, Any]) -> No
                 # Require aggregate field for labeled_counter and quantity metrics
                 metric_type = schema["type"]
                 if "aggregate" not in config["histograms"][hist]:
-                    print(f"ERROR: {metric_type} metric '{hist}' requires an 'aggregate' field.")
-                    print(f"  Specify 'aggregate: sum' (total) or 'aggregate: percentiles' (median/p75/p95).")
-                    print(f"  Example in config:")
-                    print(f"    histograms:")
+                    print(
+                        f"ERROR: {metric_type} metric '{hist}' requires an 'aggregate' field."
+                    )
+                    print(
+                        "  Specify 'aggregate: sum' (total) or 'aggregate: percentiles' (median/p75/p95)."
+                    )
+                    print("  Example in config:")
+                    print("    histograms:")
                     print(f"      - {hist}:")
-                    print(f"          aggregate: sum  # or 'percentiles'")
+                    print("          aggregate: sum  # or 'percentiles'")
                     sys.exit(1)
 
                 aggregate = config["histograms"][hist]["aggregate"]
                 if aggregate not in ["sum", "percentiles"]:
                     print(f"ERROR: Invalid aggregate value '{aggregate}' for '{hist}'.")
-                    print(f"  Must be 'sum' or 'percentiles'.")
+                    print("  Must be 'sum' or 'percentiles'.")
                     sys.exit(1)
 
                 if aggregate == "sum":
@@ -363,18 +367,22 @@ def annotateHistograms(config: Dict[str, Any], probeIndex: Dict[str, Any]) -> No
                 # Require aggregate field for labeled_counter and quantity metrics
                 metric_type = schema["type"]
                 if "aggregate" not in config["histograms"][hist]:
-                    print(f"ERROR: {metric_type} metric '{hist}' requires an 'aggregate' field.")
-                    print(f"  Specify 'aggregate: sum' (total) or 'aggregate: percentiles' (median/p75/p95).")
-                    print(f"  Example in config:")
-                    print(f"    histograms:")
+                    print(
+                        f"ERROR: {metric_type} metric '{hist}' requires an 'aggregate' field."
+                    )
+                    print(
+                        "  Specify 'aggregate: sum' (total) or 'aggregate: percentiles' (median/p75/p95)."
+                    )
+                    print("  Example in config:")
+                    print("    histograms:")
                     print(f"      - {hist}:")
-                    print(f"          aggregate: sum  # or 'percentiles'")
+                    print("          aggregate: sum  # or 'percentiles'")
                     sys.exit(1)
 
                 aggregate = config["histograms"][hist]["aggregate"]
                 if aggregate not in ["sum", "percentiles"]:
                     print(f"ERROR: Invalid aggregate value '{aggregate}' for '{hist}'.")
-                    print(f"  Must be 'sum' or 'percentiles'.")
+                    print("  Must be 'sum' or 'percentiles'.")
                     sys.exit(1)
 
                 if aggregate == "sum":

@@ -84,7 +84,7 @@ android_data as (
 ,desktop_data_non_enrolled as (
     SELECT
         normalized_os as segment,
-        "non-enrolled" as branch,
+        "default" as branch,
         {% if distribution_type == "timing_distribution" %}
         CAST(key as INT64)/1000000 AS bucket,
         {% elif distribution_type == "labeled_counter" %}
@@ -123,7 +123,7 @@ android_data as (
 android_data_non_enrolled as (
     SELECT
         normalized_os as segment,
-        "non-enrolled" as branch,
+        "default" as branch,
         {% if distribution_type == "timing_distribution" %}
         CAST(key as INT64)/1000000 AS bucket,
         {% elif distribution_type == "labeled_counter" %}

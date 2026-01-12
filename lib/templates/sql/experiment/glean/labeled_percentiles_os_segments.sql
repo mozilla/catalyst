@@ -29,11 +29,37 @@ desktop_raw as (
     CROSS JOIN UNNEST(counter_data)
     WHERE value > 0
 ),
+{% if include_non_enrolled_branch == True %}
+desktop_raw_non_enrolled as (
+    SELECT
+        normalized_os as segment,
+        "default" as branch,
+        key AS label,
+        value
+    FROM `mozdata.firefox_desktop.metrics`
+    CROSS JOIN UNNEST({{histogram}}) as counter_data
+    WHERE
+      DATE(submission_timestamp) >= DATE('{{startDate}}')
+      AND DATE(submission_timestamp) <= DATE('{{endDate}}')
+      AND normalized_channel = "{{channel}}"
+      AND normalized_app_name = "Firefox"
+      {% if single_os_filter %}AND normalized_os = "{{single_os_filter}}"{% endif %}
+      AND {{histogram}} is not null
+      AND mozfun.map.get_key(ping_info.experiments, "{{slug}}").branch is null
+      AND value > 0
+),
+{% endif %}
 {% else %}
 desktop_raw as (
   SELECT "" as segment, "" as branch, "" as label, 0 as value
   WHERE FALSE
 ),
+{% if include_non_enrolled_branch == True %}
+desktop_raw_non_enrolled as (
+  SELECT "" as segment, "" as branch, "" as label, 0 as value
+  WHERE FALSE
+),
+{% endif %}
 {% endif %}
 {% if available_on_android == True %}
 android_enrolled as (
@@ -59,12 +85,37 @@ android_raw as (
     FROM android_enrolled
     CROSS JOIN UNNEST(counter_data)
     WHERE value > 0
+),
+{% if include_non_enrolled_branch == True %}
+android_raw_non_enrolled as (
+    SELECT
+        normalized_os as segment,
+        "default" as branch,
+        key AS label,
+        value
+    FROM `mozdata.fenix.metrics`
+    CROSS JOIN UNNEST({{histogram}}) as counter_data
+    WHERE
+      DATE(submission_timestamp) >= DATE('{{startDate}}')
+      AND DATE(submission_timestamp) <= DATE('{{endDate}}')
+      AND normalized_channel = "{{channel}}"
+      {% if single_os_filter %}AND normalized_os = "{{single_os_filter}}"{% endif %}
+      AND {{histogram}} is not null
+      AND mozfun.map.get_key(ping_info.experiments, "{{slug}}").branch is null
+      AND value > 0
 )
+{% endif %}
 {% else %}
 android_raw as (
   SELECT "" as segment, "" as branch, "" as label, 0 as value
   WHERE FALSE
+),
+{% if include_non_enrolled_branch == True %}
+android_raw_non_enrolled as (
+  SELECT "" as segment, "" as branch, "" as label, 0 as value
+  WHERE FALSE
 )
+{% endif %}
 {% endif %}
 
 SELECT
@@ -79,6 +130,12 @@ FROM (
     SELECT * FROM desktop_raw
     UNION ALL
     SELECT * FROM android_raw
+{% if include_non_enrolled_branch == True %}
+    UNION ALL
+    SELECT * FROM desktop_raw_non_enrolled
+    UNION ALL
+    SELECT * FROM android_raw_non_enrolled
+{% endif %}
 )
 GROUP BY segment, branch, label
 ORDER BY segment, branch, label

@@ -339,11 +339,11 @@ class TestSQLQueryGeneration(unittest.TestCase):
         self.assertIsNotNone(query, "Rollout query generation failed")
         self.generated_queries.append(("rollout_histogram", query))
 
-        # Rollouts should include non-enrolled branch logic
+        # Rollouts should include non-enrolled branch logic (uses "default" branch name)
         self.assertIn(
-            "non-enrolled",
+            '"default" as branch',
             query,
-            "Rollout query should include non-enrolled branch logic",
+            "Rollout query should include default branch for non-enrolled clients",
         )
 
         # Validate the query

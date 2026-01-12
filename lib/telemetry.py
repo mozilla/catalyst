@@ -454,10 +454,16 @@ class TelemetryClient:
     ):
         for histogram in self.config["histograms"]:
             # Skip labeled_percentiles metrics - they're processed separately
-            if self.config["histograms"][histogram].get("kind") == "labeled_percentiles":
+            if (
+                self.config["histograms"][histogram].get("kind")
+                == "labeled_percentiles"
+            ):
                 continue
             # Skip quantity_percentiles metrics - they're processed separately
-            if self.config["histograms"][histogram].get("kind") == "quantity_percentiles":
+            if (
+                self.config["histograms"][histogram].get("kind")
+                == "quantity_percentiles"
+            ):
                 continue
             df = histograms[histogram]
             if segment == "All":
@@ -1139,6 +1145,7 @@ class TelemetryClient:
         t = get_template("experiment/glean/labeled_percentiles_os_segments.sql")
 
         context = {
+            "include_non_enrolled_branch": self.config["include_non_enrolled_branch"],
             "slug": self.config["slug"],
             "channel": self.config["channel"],
             "startDate": self.config["startDate"],
@@ -1154,7 +1161,9 @@ class TelemetryClient:
         }
         query = t.render(context)
         query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
-        self.queries.append({"name": f"Labeled Percentiles: {histogram}", "query": query})
+        self.queries.append(
+            {"name": f"Labeled Percentiles: {histogram}", "query": query}
+        )
         return query
 
     def getLabeledPercentilesData(self, config, histogram):
@@ -1223,6 +1232,7 @@ class TelemetryClient:
         t = get_template("experiment/glean/quantity_percentiles_os_segments.sql")
 
         context = {
+            "include_non_enrolled_branch": self.config["include_non_enrolled_branch"],
             "slug": self.config["slug"],
             "channel": self.config["channel"],
             "startDate": self.config["startDate"],
@@ -1238,13 +1248,17 @@ class TelemetryClient:
         }
         query = t.render(context)
         query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
-        self.queries.append({"name": f"Quantity Percentiles: {histogram}", "query": query})
+        self.queries.append(
+            {"name": f"Quantity Percentiles: {histogram}", "query": query}
+        )
         return query
 
     def getQuantityPercentilesData(self, config, histogram):
         slug = config["slug"]
         hist_name = histogram.split(".")[-1]
-        filename = os.path.join(self.dataDir, f"{slug}-{hist_name}-quantity-percentiles.pkl")
+        filename = os.path.join(
+            self.dataDir, f"{slug}-{hist_name}-quantity-percentiles.pkl"
+        )
 
         df = self.checkForExistingData(filename)
         if df is not None:
@@ -1288,7 +1302,9 @@ class TelemetryClient:
                 median = float(row["median"]) if row["median"] is not None else 0.0
                 p75 = float(row["p75"]) if row["p75"] is not None else 0.0
                 p95 = float(row["p95"]) if row["p95"] is not None else 0.0
-                total_sum = float(row["total_sum"]) if row["total_sum"] is not None else 0.0
+                total_sum = (
+                    float(row["total_sum"]) if row["total_sum"] is not None else 0.0
+                )
                 count = int(row["sample_count"])
 
                 # Store in results
