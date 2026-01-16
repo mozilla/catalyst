@@ -22,7 +22,7 @@ pandas==2.2.3
 proto-plus==1.25.0
 protobuf==5.29.5
 pyarrow==19.0.0
-pyasn1==0.6.1
+pyasn1==0.6.2
 pyasn1_modules==0.4.1
 python-dateutil==2.9.0.post0
 pytz==2024.2
