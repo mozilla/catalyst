@@ -61,7 +61,8 @@ android_raw as (
       {% if single_os_filter %}AND normalized_os = "{{single_os_filter}}"{% endif %}
       AND {{histogram}} is not null
       AND mozfun.map.get_key(ping_info.experiments, "{{slug}}").branch is not null
-),
+){% if include_non_enrolled_branch == True %},
+{% endif %}
 {% if include_non_enrolled_branch == True %}
 android_raw_non_enrolled as (
     SELECT
@@ -82,7 +83,8 @@ android_raw_non_enrolled as (
 android_raw as (
   SELECT "" as segment, "" as branch, 0 as value
   WHERE FALSE
-),
+){% if include_non_enrolled_branch == True %},
+{% endif %}
 {% if include_non_enrolled_branch == True %}
 android_raw_non_enrolled as (
   SELECT "" as segment, "" as branch, 0 as value

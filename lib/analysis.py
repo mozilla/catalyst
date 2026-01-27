@@ -288,7 +288,7 @@ def createNumericalTemplate():
 
 
 def createCategoricalTemplate():
-    template = {"desc": "", "labels": [], "counts": [], "sum": 0}
+    template = {"desc": "", "labels": [], "counts": [], "sample_counts": [], "sum": 0}
     return template
 
 
@@ -424,8 +424,10 @@ class DataAnalyzer:
             # Apply unified categorical analysis
             labels = data["bins"]
             counts = data["counts"]
+            sample_counts = data.get("sample_counts", [])
             result_location["labels"] = labels
             result_location["counts"] = counts
+            result_location["sample_counts"] = sample_counts
             total = sum(counts)
             result_location["sum"] = total
 

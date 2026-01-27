@@ -468,16 +468,18 @@ class TelemetryClient:
             df = histograms[histogram]
             if segment == "All":
                 subset = (
-                    df[df["branch"] == branch][["bucket", "counts"]]
+                    df[df["branch"] == branch][["bucket", "counts", "sample_count"]]
                     .groupby(["bucket"])
                     .sum()
                 )
                 buckets = list(subset.index)
                 counts = list(subset["counts"])
+                sample_counts = list(subset.get("sample_count", [0] * len(buckets)))
             else:
                 subset = df[(df["segment"] == segment) & (df["branch"] == branch)]
                 buckets = list(subset["bucket"])
                 counts = list(subset["counts"])
+                sample_counts = list(subset.get("sample_count", [0] * len(buckets)))
 
             # Some clients report bucket sizes that are not real, and these buckets
             # end up having 1-5 samples in them.  Filter these out entirely.
@@ -491,6 +493,8 @@ class TelemetryClient:
                 for i in sorted(remove, reverse=True):
                     del buckets[i]
                     del counts[i]
+                    if sample_counts:
+                        del sample_counts[i]
 
             # Add labels to the buckets for categorical histograms.
             if self.config["histograms"][histogram]["kind"] == "categorical":
@@ -501,15 +505,23 @@ class TelemetryClient:
                     if len(labels) == (len(buckets) - 1) and counts[-1] == 0:
                         del buckets[-1]
                         del counts[-1]
+                        if sample_counts:
+                            del sample_counts[-1]
 
                     # Create a bucket->count mapping from query results
                     bucket_to_count = dict(zip(buckets, counts))
+                    bucket_to_sample_count = (
+                        dict(zip(buckets, sample_counts)) if sample_counts else {}
+                    )
 
                     # Remap counts to match label order, filling missing labels with 0
                     new_counts = []
+                    new_sample_counts = []
                     for label in labels:
                         new_counts.append(bucket_to_count.get(label, 0))
+                        new_sample_counts.append(bucket_to_sample_count.get(label, 0))
                     counts = new_counts
+                    sample_counts = new_sample_counts
 
                     # Use labels as bucket names
                     buckets = labels
@@ -520,20 +532,33 @@ class TelemetryClient:
                 maxBucket = self.config["histograms"][histogram]["max"]
                 remove = []
                 maxBucketCount = 0
+                maxBucketSampleCount = 0
                 for i, x in enumerate(buckets):
                     if x >= maxBucket:
                         remove.append(i)
                         maxBucketCount = maxBucketCount + counts[i]
+                        if sample_counts:
+                            maxBucketSampleCount = (
+                                maxBucketSampleCount + sample_counts[i]
+                            )
                 for i in sorted(remove, reverse=True):
                     del buckets[i]
                     del counts[i]
+                    if sample_counts:
+                        del sample_counts[i]
                 buckets.append(maxBucket)
                 counts.append(maxBucketCount)
+                if sample_counts:
+                    sample_counts.append(maxBucketSampleCount)
 
             assert len(buckets) == len(counts)
             results[branch][segment]["histograms"][histogram] = {}
             results[branch][segment]["histograms"][histogram]["bins"] = buckets
             results[branch][segment]["histograms"][histogram]["counts"] = counts
+            if sample_counts:
+                results[branch][segment]["histograms"][histogram][
+                    "sample_counts"
+                ] = sample_counts
             print(f"    segment={segment} len(histogram: {histogram}) = ", len(buckets))
 
         for metric in self.config["pageload_event_metrics"]:

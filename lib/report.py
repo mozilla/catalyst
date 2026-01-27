@@ -204,6 +204,17 @@ class ReportGenerator:
 
                     # Generate summary for categorical metrics
                     if data_type == "categorical":
+                        # Check if this is a labeled_counter with sum aggregate
+                        is_sum_aggregate = False
+                        for hist_key in self.data.get("histograms", {}):
+                            hist_name = hist_key.split(".")[-1]
+                            if hist_name == metric:
+                                is_sum_aggregate = (
+                                    self.data["histograms"][hist_key].get("aggregate")
+                                    == "sum"
+                                )
+                                break
+
                         branches = []
                         for branch in self.data["branches"]:
                             branch_name = (
@@ -223,23 +234,66 @@ class ReportGenerator:
                                 ][metric]
                                 rows = []
                                 n_labels = len(metric_data["labels"])
-                                for i in range(n_labels):
+
+                                # For labeled_counter with sum aggregate and many labels,
+                                # only show top 2-3 by absolute uplift
+                                if is_sum_aggregate and n_labels > 10:
+                                    # Create list of (index, label, uplift) tuples
+                                    label_uplifts = [
+                                        (
+                                            i,
+                                            metric_data["labels"][i],
+                                            metric_data["uplift"][i],
+                                        )
+                                        for i in range(n_labels)
+                                    ]
+                                    # Sort by absolute uplift descending
+                                    label_uplifts.sort(
+                                        key=lambda x: abs(x[2]), reverse=True
+                                    )
+                                    # Take top 3
+                                    label_uplifts = label_uplifts[:3]
+                                    indices_to_show = [x[0] for x in label_uplifts]
+                                else:
+                                    indices_to_show = range(n_labels)
+
+                                for i in indices_to_show:
                                     label = metric_data["labels"][i]
                                     uplift = metric_data["uplift"][i]
 
                                     # Skip small uplifts for enumerated histograms with many labels
-                                    if n_labels > 5 and abs(uplift) < 0.05:
+                                    if (
+                                        not is_sum_aggregate
+                                        and n_labels > 5
+                                        and abs(uplift) < 0.05
+                                    ):
                                         continue
 
                                     weight = "font-weight:normal;"
+                                    color = ""
                                     if abs(uplift) >= 10:
                                         effect = "Large"
                                         weight = "font-weight:bold;"
+                                        color = (
+                                            "color:red;"
+                                            if uplift > 0
+                                            else "color:green;"
+                                        )
                                     elif abs(uplift) >= 5:
                                         effect = "Medium"
                                         weight = "font-weight:bold;"
+                                        color = (
+                                            "color:red;"
+                                            if uplift > 0
+                                            else "color:green;"
+                                        )
                                     elif abs(uplift) >= 2:
                                         effect = "Small"
+                                        color = (
+                                            "color:red;"
+                                            if uplift > 0
+                                            else "color:green;"
+                                        )
                                     else:
                                         effect = "None"
 
@@ -255,6 +309,7 @@ class ReportGenerator:
                                             "uplift": uplift_desc,
                                             "effect": effect,
                                             "weight": weight,
+                                            "color": color,
                                             "style": f"background:{row_background};",
                                         }
                                     )
@@ -1154,25 +1209,29 @@ class ReportGenerator:
 
         n_elem = len(self.data[control][segment][metric_type][metric]["counts"])
 
-        # Get unit from metric config if available
+        # Get unit and aggregate type from metric config if available
         unit = ""
+        aggregate = None
         for hist_key in self.data.get("histograms", {}):
             hist_name = hist_key.split(".")[-1]
             if hist_name == metric:
                 unit = self.data["histograms"][hist_key].get("unit", "")
+                aggregate = self.data["histograms"][hist_key].get("aggregate")
                 break
-        if n_elem <= 10:
+        if n_elem <= 20:
+            # For metrics with <= 20 categories (like labeled counters), show all
             indices = set(range(0, n_elem))
+        else:
+            # For metrics with many categories, only show significant changes
+            for branch in self.data["branches"]:
+                if branch == control:
+                    continue
+                uplift = self.data[branch][segment][metric_type][metric]["uplift"]
 
-        for branch in self.data["branches"]:
-            if branch == control:
-                continue
-            uplift = self.data[branch][segment][metric_type][metric]["uplift"]
-
-            for i in range(len(uplift)):
-                # Show categories with > 1% change
-                if abs(uplift[i]) > 1:
-                    indices.add(i)
+                for i in range(len(uplift)):
+                    # Show categories with > 1% change
+                    if abs(uplift[i]) > 1:
+                        indices.add(i)
 
         datasets = []
         for branch in self.data["branches"]:
@@ -1180,10 +1239,21 @@ class ReportGenerator:
                 float(self.data[branch][segment][metric_type][metric]["counts"][i])
                 for i in indices
             ]
+            sample_counts_branch = []
+            if "sample_counts" in self.data[branch][segment][metric_type][metric]:
+                sample_counts_list = self.data[branch][segment][metric_type][metric][
+                    "sample_counts"
+                ]
+                if sample_counts_list:
+                    sample_counts_branch = [
+                        float(sample_counts_list[i]) for i in indices
+                    ]
+
             datasets.append(
                 {
                     "branch": branch,
                     "counts": counts_branch,
+                    "sample_counts": sample_counts_branch,
                 }
             )
 
@@ -1217,6 +1287,19 @@ class ReportGenerator:
                 else:
                     count_display = f"{count_num:,}"
 
+                # Get sample count if available
+                sample_count = None
+                if "sample_counts" in dataset and dataset["sample_counts"]:
+                    sample_count_num = int(dataset["sample_counts"][idx])
+                    if sample_count_num >= 1000000000:
+                        sample_count = f"{sample_count_num / 1000000000:.1f}B"
+                    elif sample_count_num >= 1000000:
+                        sample_count = f"{sample_count_num / 1000000:.1f}M"
+                    elif sample_count_num >= 1000:
+                        sample_count = f"{sample_count_num / 1000:.1f}K"
+                    else:
+                        sample_count = f"{sample_count_num:,}"
+
                 # Uplift only for non-control branches
                 uplift = None
                 if j > 0 and len(datasets) > 1 and "uplift" in datasets[1]:
@@ -1226,6 +1309,7 @@ class ReportGenerator:
                     {
                         "branch_name": dataset["branch"],
                         "count": count_display,
+                        "sample_count": sample_count,
                         "uplift": uplift,
                     }
                 )
@@ -1246,6 +1330,7 @@ class ReportGenerator:
             "metric": metric,
             "segment": segment,
             "unit": unit,
+            "aggregate": aggregate,
         }
         self.doc(t.render(context))
 

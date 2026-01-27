@@ -16,7 +16,7 @@ histograms:
 
   # CPU time per process type
   - metrics.labeled_counter.power_cpu_time_per_process_type_ms:
-      aggregate: percentiles
+      aggregate: sum
 
   # Page load metrics
   - metrics.timing_distribution.performance_pageload_fcp

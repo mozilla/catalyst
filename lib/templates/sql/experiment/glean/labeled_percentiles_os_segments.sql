@@ -85,7 +85,8 @@ android_raw as (
     FROM android_enrolled
     CROSS JOIN UNNEST(counter_data)
     WHERE value > 0
-),
+){% if include_non_enrolled_branch == True %},
+{% endif %}
 {% if include_non_enrolled_branch == True %}
 android_raw_non_enrolled as (
     SELECT
@@ -109,7 +110,8 @@ android_raw_non_enrolled as (
 android_raw as (
   SELECT "" as segment, "" as branch, "" as label, 0 as value
   WHERE FALSE
-),
+){% if include_non_enrolled_branch == True %},
+{% endif %}
 {% if include_non_enrolled_branch == True %}
 android_raw_non_enrolled as (
   SELECT "" as segment, "" as branch, "" as label, 0 as value

@@ -271,8 +271,13 @@ def annotateHistograms(config: Dict[str, Any], probeIndex: Dict[str, Any]) -> No
                     sys.exit(1)
 
                 if aggregate == "sum":
-                    # Sum mode: single scalar value
-                    config["histograms"][hist]["kind"] = "scalar"
+                    # Sum mode
+                    # For labeled_counter: keep per-label sums (use categorical kind for display)
+                    # For quantity: single scalar value
+                    if schema["type"] == "labeled_counter":
+                        config["histograms"][hist]["kind"] = "categorical"
+                    else:
+                        config["histograms"][hist]["kind"] = "scalar"
                 else:
                     # Percentiles mode: calculate median, p75, p95
                     # For labeled_counter, use labeled_percentiles (per-label tables)
@@ -386,8 +391,13 @@ def annotateHistograms(config: Dict[str, Any], probeIndex: Dict[str, Any]) -> No
                     sys.exit(1)
 
                 if aggregate == "sum":
-                    # Sum mode: single scalar value
-                    config["histograms"][hist]["kind"] = "scalar"
+                    # Sum mode
+                    # For labeled_counter: keep per-label sums (use categorical kind for display)
+                    # For quantity: single scalar value
+                    if schema["type"] == "labeled_counter":
+                        config["histograms"][hist]["kind"] = "categorical"
+                    else:
+                        config["histograms"][hist]["kind"] = "scalar"
                 else:
                     # Percentiles mode: calculate median, p75, p95
                     # For labeled_counter, use labeled_percentiles (per-label tables)

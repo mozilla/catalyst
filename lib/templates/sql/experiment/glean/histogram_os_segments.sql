@@ -163,7 +163,8 @@ SELECT
     segment,
     branch,
     bucket,
-    SUM(CAST(count AS NUMERIC)) as counts
+    SUM(CAST(count AS NUMERIC)) as counts,
+    COUNT(*) as sample_count
 FROM
     (
         SELECT * FROM desktop_data
