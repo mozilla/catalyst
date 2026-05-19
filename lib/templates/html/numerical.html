@@ -1,0 +1,194 @@
+{% autoescape off %}
+{% for chart in charts %}
+<div class="chart"><canvas height="300px" id="{{segment}}-{{metric}}-{{chart.id}}"></canvas></div>
+<script>
+  (function() {
+    const ctx = document.getElementById('{{segment}}-{{metric}}-{{chart.id}}');
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: {{chart.x_labels|safe}},
+        datasets: [
+{% for series in chart.datasets %}
+          {
+            label: "{{series.label}}",
+            data: [
+{% for point in series.points %}
+              {
+                x: "{{point.x}}",
+                y: {{point.y}},
+                {% if point.uplift is not none %}
+                uplift: {{point.uplift}},
+                {% endif %}
+                {% if point.diff is not none %}
+                diff: {{point.diff}}
+                {% endif %}
+              },
+{% endfor %}
+            ],
+          },
+{% endfor %}
+        ]
+      },
+      options: {
+        animation: false,
+        maintainAspectRatio: false,
+        responsive: true,
+        plugins: {
+            datalabels: {
+              anchor: 'end',
+              align: 'top',
+              textAlign: 'center',
+              formatter: (n) => {
+                  if (!n.hasOwnProperty('uplift')) {
+                    return n.y.toFixed(2);
+                  }
+                  const sign = n.uplift > 0 ? "+" : "";
+                  const diffStr = n.hasOwnProperty('diff')
+                    ? (n.diff > 0 ? "+" : "") + n.diff.toFixed(2) + " "
+                    : "";
+                  // Two-line label: value on top, diff+uplift below — keeps the
+                  // labels narrow enough to fit when there are several cohorts.
+                  return [
+                    n.y.toFixed(2),
+                    diffStr + "(" + sign + n.uplift.toFixed(1) + "%)"
+                  ];
+              },
+              font: {
+                weight: 'bold',
+                size: 12
+              }
+            },
+            legend: {
+                display: true,
+                position: 'top',
+              },
+            title: {
+                display: true,
+                text: ["{{metric}} {{chart.label}}", "segment: {{segment}}"]
+              }
+        },
+        scales: {
+          y: {
+            grace: '25%',
+            beginAtZero: true,
+            title: {
+              text: "value{% if unit %} ({{unit}}){% endif %}",
+              display: true
+            }
+          },
+          x: {
+            type: "category",
+          }
+        },
+      }
+    });
+  })();
+</script>
+{% endfor %}
+
+<table border="1" cellpadding="0" cellspacing="0" class="stat-table" style="table-layout: fixed; width: 100%;">
+  <thead>
+    <tr>
+      <th style="font-size: 13px; padding: 8px;">Branch</th>
+      <th style="font-size: 13px; padding: 8px;">N</th>
+      <th style="font-size: 13px; padding: 8px;">Median{% if unit %} ({{unit}}){% endif %}</th>
+      <th style="font-size: 13px; padding: 8px;">Median Uplift</th>
+      <th style="font-size: 13px; padding: 8px;">p75{% if unit %} ({{unit}}){% endif %}</th>
+      <th style="font-size: 13px; padding: 8px;">p75 Uplift</th>
+      <th style="font-size: 13px; padding: 8px;">Mean{% if unit %} ({{unit}}){% endif %}</th>
+      <th style="font-size: 13px; padding: 8px;">Mean Uplift</th>
+    </tr>
+  </thead>
+  <tbody>
+{% for dataset in datasets %}
+    <tr style="background-color: {% if forloop.counter0|divisibleby:2 %}#f9f9f9{% else %}#ffffff{% endif %};">
+      <td style="text-align: left; padding: 6px; font-size: 13px;">{{dataset.branch}}</td>
+      <td style="padding: 6px; font-size: 13px;">{{dataset.n}}</td>
+      <td style="padding: 6px; font-size: 13px;">{{dataset.median}}</td>
+      <td style="padding: 6px; font-size: 13px;{% if dataset.median_pct_raw is not none and dataset.median_pct_raw >= 10 %} background-color: #ffcdd2; color: #c62828;{% elif dataset.median_pct_raw is not none and dataset.median_pct_raw <= -10 %} background-color: #c8e6c9; color: #2e7d32;{% endif %}">{% if dataset.median_combined %}{{dataset.median_combined}}{% else %}-{% endif %}</td>
+      <td style="padding: 6px; font-size: 13px;">{{dataset.p75}}</td>
+      <td style="padding: 6px; font-size: 13px;{% if dataset.p75_pct_raw is not none and dataset.p75_pct_raw >= 10 %} background-color: #ffcdd2; color: #c62828;{% elif dataset.p75_pct_raw is not none and dataset.p75_pct_raw <= -10 %} background-color: #c8e6c9; color: #2e7d32;{% endif %}">{% if dataset.p75_combined %}{{dataset.p75_combined}}{% else %}-{% endif %}</td>
+      <td style="padding: 6px; font-size: 13px;">{{dataset.mean}}</td>
+      <td style="padding: 6px; font-size: 13px;{% if dataset.mean_pct_raw is not none and dataset.mean_pct_raw >= 10 %} background-color: #ffcdd2; color: #c62828;{% elif dataset.mean_pct_raw is not none and dataset.mean_pct_raw <= -10 %} background-color: #c8e6c9; color: #2e7d32;{% endif %}">{% if dataset.mean_combined %}{{dataset.mean_combined}}{% else %}-{% endif %}</td>
+    </tr>
+{% endfor %}
+  </tbody>
+</table>
+
+<table border="1" cellspacing="0" cellpadding="0" class="stat-table">
+  <thead>
+    <tr>
+      <th rowspan=2>
+        <div class="tooltip">branch
+          <span class="tooltiptext">All results compared against control.</span>
+        </div>
+      </th>
+      <th colspan=2>
+        <div class="tooltip">t-test
+          <span class="tooltiptext">Student t-test statistic.</span>
+        </div>
+      </th>
+      <th colspan=2>
+        <div class="tooltip">mwu
+          <span class="tooltiptext">Mann-Whitney U test statistic.</span>
+        </div>
+      </th>
+      <th colspan=2>
+        <div class="tooltip">ks
+          <span class="tooltiptext">Kolmogorov-Smirnov test statistic.</span>
+        </div>
+      </th>
+    </tr>
+    <tr>
+      <th>
+        effect
+      </th>
+      <th>
+        p-value
+      </th>
+      <th>
+        effect
+      </th>
+      <th>
+        p-value
+      </th>
+      <th>
+        effect
+      </th>
+      <th>
+        p-value
+      </th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for dataset in datasets %}
+    {% if dataset.control == False %}
+    <tr>
+      <td>
+        {{dataset.branch}}
+      </td>
+      <td>
+        {{dataset.ttest.effect}}
+      </td>
+      <td>
+        {{dataset.ttest.pval}}
+      </td>
+      <td>
+        {{dataset.mwu.effect}}
+      </td>
+      <td>
+        {{dataset.mwu.pval}}
+      </td>
+      <td>
+        {{dataset.ks.effect}}
+      </td>
+      <td>
+        {{dataset.ks.pval}}
+      </td>
+    </tr>
+    {% endif %}
+    {% endfor %}
+  </tbody>
+</table>
+{% endautoescape %}

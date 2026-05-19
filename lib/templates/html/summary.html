@@ -108,7 +108,17 @@
             <span class="tooltiptext">Uplift of the median compared against control.</span>
           </div>
         </th>
-        <th> 
+        <th>
+          <div class="tooltip">p75 uplift
+            <span class="tooltiptext">Uplift of the 75th percentile compared against control.</span>
+          </div>
+        </th>
+        <th>
+          <div class="tooltip">p95 uplift
+            <span class="tooltiptext">Uplift of the 95th percentile compared against control.</span>
+          </div>
+        </th>
+        <th>
           <div class="tooltip">effect size (mwu)
             <span class="tooltiptext">Effect size calculated by Rank Biserial Correlation.</span>
           </div>
@@ -130,7 +140,13 @@
         </td>
     {% for data in metric.datasets %}
       <td style="{{data.style}}"><div style="{{data.color}};">{{data.branch}}</div></td>
-      <td style="{{data.style}}"><div style="{{data.color}};">{{data.uplift}}{% if not data.skip_percent %}%{% endif %}</div></td>
+      {% if data.p75_uplift %}
+      <td style="{{data.style}}"><div style="{% if data.median_color %}{{data.median_color}}{% else %}{{data.color}}{% endif %};">{{data.median_uplift}}{% if not data.skip_percent %}%{% endif %}</div></td>
+      <td style="{{data.style}}"><div style="{% if data.p75_color %}{{data.p75_color}}{% else %}{{data.color}}{% endif %};">{{data.p75_uplift}}{% if not data.skip_percent %}%{% endif %}</div></td>
+      <td style="{{data.style}}"><div style="{% if data.p95_color %}{{data.p95_color}}{% else %}{{data.color}}{% endif %};">{{data.p95_uplift}}{% if not data.skip_percent %}%{% endif %}</div></td>
+      {% else %}
+      <td colspan=3 style="{{data.style}}"><div style="{{data.color}};">{{data.uplift}}{% if not data.skip_percent %}%{% endif %}</div></td>
+      {% endif %}
       <td style="{{data.style}}"><div style="{{data.color}};">{{data.effect}}</div></td>
       </tr>
       <tr>
@@ -154,7 +170,7 @@
         {{branch.branch}}
       </td>
         {% for row in branch.rows %}
-        <td style="{{row.style}}">
+        <td colspan=3 style="{{row.style}}">
           <div style="{{row.weight}} {{row.color}}">{{row.uplift}}</div>
         </td>
         <td style="{{row.style}}">

@@ -17,7 +17,7 @@ from lib.analysis import (
     calc_histogram_quantiles,
     calc_histogram_density,
     calc_histogram_mean_var,
-    calc_histogram_median,
+    calc_histogram_percentile,
     calc_confidence_interval,
     createNumericalTemplate,
     createCategoricalTemplate,
@@ -177,14 +177,15 @@ class TestAnalysis(unittest.TestCase):
         for val in result:
             self.assertIsInstance(val, (int, float))
 
-    def test_calc_histogram_median(self):
-        """Test calc_histogram_median function."""
+    def test_calc_histogram_percentile(self):
+        """Test calc_histogram_percentile function."""
         bins = [10, 20, 30, 40]
         counts = [100, 200, 300, 400]
-        result = calc_histogram_median(bins, counts)
-        self.assertIsInstance(result, (int, float))
-        self.assertGreaterEqual(result, min(bins))
-        self.assertLessEqual(result, max(bins))
+        for q in (0.5, 0.75, 0.95):
+            result = calc_histogram_percentile(bins, counts, q)
+            self.assertIsInstance(result, (int, float))
+            self.assertGreaterEqual(result, min(bins))
+            self.assertLessEqual(result, max(bins))
 
     def test_calc_confidence_interval(self):
         """Test calc_confidence_interval function."""

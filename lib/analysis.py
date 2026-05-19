@@ -132,16 +132,16 @@ def calc_histogram_mean_var(bins, counts):
     return [mean, var, std, n]
 
 
-def calc_histogram_median(bins, counts):
-    """Calculate median from histogram bins and counts."""
+def calc_histogram_percentile(bins, counts, q):
+    """Calculate the q-th percentile (0 < q < 1) from histogram bins and counts."""
     # Convert counts to int in case they're decimal.Decimal from BigQuery
     counts = [int(c) for c in counts]
     total_count = sum(counts)
     if total_count == 0:
         return 0.0
 
-    # Find the bin containing the median (50th percentile)
-    target = total_count / 2.0
+    # Find the bin containing the q-th percentile
+    target = total_count * q
     cumulative = 0
 
     for i, count in enumerate(counts):
@@ -151,7 +151,7 @@ def calc_histogram_median(bins, counts):
             if count == 0:
                 return bins[i]
 
-            # How far into the bin is the median?
+            # How far into the bin is the target?
             remaining = target - (cumulative - count)
             fraction = remaining / count
 
@@ -175,9 +175,10 @@ def calculate_histogram_stats(bins, counts, data):
     data["var"] = var
     data["n"] = n
 
-    # Calculate median
-    median = calc_histogram_median(bins, counts)
-    data["median"] = median
+    # Calculate median, p75, p95
+    data["median"] = calc_histogram_percentile(bins, counts, 0.5)
+    data["p75"] = calc_histogram_percentile(bins, counts, 0.75)
+    data["p95"] = calc_histogram_percentile(bins, counts, 0.95)
 
     # Calculate densities
     [density, cdf] = calc_histogram_density(counts, n)

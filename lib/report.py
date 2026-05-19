@@ -588,12 +588,11 @@ class ReportGenerator:
                                 # Use median uplift for summary
                                 if "median_uplift" in metric_data:
                                     median_uplift = metric_data["median_uplift"]
+                                    p75_uplift = metric_data.get("p75_uplift", 0.0)
+                                    p95_uplift = metric_data.get("p95_uplift", 0.0)
 
-                                    uplift_str = (
-                                        f"+{median_uplift:.1f}"
-                                        if median_uplift > 0
-                                        else f"{median_uplift:.1f}"
-                                    )
+                                    def _fmt(v):
+                                        return f"+{v:.1f}%" if v > 0 else f"{v:.1f}%"
 
                                     # Determine effect size based on uplift magnitude
                                     if abs(median_uplift) >= 10:
@@ -608,7 +607,10 @@ class ReportGenerator:
                                     datasets.append(
                                         {
                                             "branch": branch_name,
-                                            "uplift": f"{uplift_str}% (median)",
+                                            "uplift": _fmt(median_uplift),
+                                            "median_uplift": _fmt(median_uplift),
+                                            "p75_uplift": _fmt(p75_uplift),
+                                            "p95_uplift": _fmt(p95_uplift),
                                             "effect": effect_meaning,
                                             "style": f"background:{row_background};border-bottom-style:solid;",
                                             "skip_percent": True,  # Don't add % in template
@@ -671,9 +673,6 @@ class ReportGenerator:
                                 median = f"{metric_data['median']:.1f}"
                                 std = f"{metric_data['std']:.1f}"
 
-                                # Calculate uplift using median
-                                branch_median = metric_data["median"]
-
                                 # Check if the metric exists in the control branch for this segment
                                 if (
                                     control_name in self.data
@@ -682,20 +681,34 @@ class ReportGenerator:
                                     and metric
                                     in self.data[control_name][segment][data_type]
                                 ):
-                                    control_median = self.data[control_name][segment][
+                                    control_data = self.data[control_name][segment][
                                         data_type
-                                    ][metric]["median"]
+                                    ][metric]
                                 else:
                                     # Skip this metric if it doesn't exist in control for this segment
                                     continue
-                                uplift = (
-                                    (branch_median - control_median)
-                                    / control_median
-                                    * 100.0
+
+                                # Calculate uplifts for median, p75, p95
+                                def _uplift_pct(branch_v, control_v):
+                                    if control_v in (0, None):
+                                        return 0.0
+                                    return (branch_v - control_v) / control_v * 100.0
+
+                                median_uplift_pct = _uplift_pct(
+                                    metric_data.get("median", 0),
+                                    control_data.get("median", 0),
                                 )
-                                uplift_str = (
-                                    f"+{uplift:.1f}" if uplift > 0 else f"{uplift:.1f}"
+                                p75_uplift_pct = _uplift_pct(
+                                    metric_data.get("p75", 0),
+                                    control_data.get("p75", 0),
                                 )
+                                p95_uplift_pct = _uplift_pct(
+                                    metric_data.get("p95", 0),
+                                    control_data.get("p95", 0),
+                                )
+
+                                def _fmt(v):
+                                    return f"+{v:.1f}" if v > 0 else f"{v:.1f}"
 
                                 # Get statistical test results
                                 if (
@@ -730,35 +743,39 @@ class ReportGenerator:
                                     higher_is_better = self.data["histograms"][
                                         full_hist_name
                                     ].get("higher_is_better", False)
-                                if (
-                                    effect_meaning == "None"
-                                    or effect_meaning == "Small"
-                                ):
-                                    color = "font-weight: normal"
-                                else:
+
+                                def _color_for(uplift_pct):
+                                    if effect_meaning in ("None", "Small"):
+                                        return "font-weight: normal"
                                     if higher_is_better:
-                                        if uplift >= 1.5:
-                                            color = "font-weight: bold; color: green"
-                                        elif uplift <= -1.5:
-                                            color = "font-weight: bold; color: red"
-                                        else:
-                                            color = "font-weight: normal"
+                                        if uplift_pct >= 1.5:
+                                            return "font-weight: bold; color: green"
+                                        elif uplift_pct <= -1.5:
+                                            return "font-weight: bold; color: red"
                                     else:
-                                        if uplift >= 1.5:
-                                            color = "font-weight: bold; color: red"
-                                        elif uplift <= -1.5:
-                                            color = "font-weight: bold; color: green"
-                                        else:
-                                            color = "font-weight: normal"
+                                        if uplift_pct >= 1.5:
+                                            return "font-weight: bold; color: red"
+                                        elif uplift_pct <= -1.5:
+                                            return "font-weight: bold; color: green"
+                                    return "font-weight: normal"
+
+                                median_color = _color_for(median_uplift_pct)
 
                                 datasets.append(
                                     {
                                         "branch": branch_name,
                                         "median": median,
-                                        "uplift": uplift_str,
+                                        # Keep `uplift` set to median for backward compat
+                                        "uplift": _fmt(median_uplift_pct),
+                                        "median_uplift": _fmt(median_uplift_pct),
+                                        "p75_uplift": _fmt(p75_uplift_pct),
+                                        "p95_uplift": _fmt(p95_uplift_pct),
+                                        "median_color": median_color,
+                                        "p75_color": _color_for(p75_uplift_pct),
+                                        "p95_color": _color_for(p95_uplift_pct),
                                         "std": std,
                                         "effect": effect,
-                                        "color": color,
+                                        "color": median_color,
                                         "style": f"background:{row_background};",
                                     }
                                 )
@@ -1113,12 +1130,33 @@ class ReportGenerator:
         }
         self.doc(t.render(context))
 
-    def createMeanComparison(self, segment, metric, metric_type):
-        t = get_template("mean.html")
+    def createNumericalComparison(self, segment, metric, metric_type):
+        t = get_template("numerical.html")
 
         datasets = []
         control = self.data["branches"][0]
         control_name = control["name"] if isinstance(control, dict) else control
+
+        # Pull control values once for uplift calculations
+        control_metric = None
+        if (
+            control_name in self.data
+            and segment in self.data[control_name]
+            and metric_type in self.data[control_name][segment]
+            and metric in self.data[control_name][segment][metric_type]
+        ):
+            control_metric = self.data[control_name][segment][metric_type][metric]
+
+        def format_value(v):
+            return f"{v:,.2f}"
+
+        def format_diff(v):
+            sign = "+" if v > 0 else ""
+            return f"{sign}{v:,.2f}"
+
+        def format_pct(v):
+            sign = "+" if v > 0 else ""
+            return f"{sign}{v:.2f}%"
 
         for branch in self.data["branches"]:
             branch_name = branch["name"] if isinstance(branch, dict) else branch
@@ -1134,53 +1172,66 @@ class ReportGenerator:
                 metric_data = self.data[branch_name][segment][metric_type][metric]
 
                 n_value = int(metric_data.get("n", 0))
-                n = f"{n_value:,}"
-                median = "{0:.1f}".format(metric_data.get("median", 0))
-
-                if branch_name != control_name:
-                    branch_mean = metric_data.get("mean", 0)
-
-                    # Check if the metric exists in the control branch for this segment
-                    if (
-                        control_name in self.data
-                        and segment in self.data[control_name]
-                        and metric_type in self.data[control_name][segment]
-                        and metric in self.data[control_name][segment][metric_type]
-                    ):
-                        control_mean = self.data[control_name][segment][metric_type][
-                            metric
-                        ].get("mean", 0)
-                    else:
-                        control_mean = 0
-                    if control_mean != 0:
-                        uplift = (branch_mean - control_mean) / control_mean * 100.0
-                        uplift = "{0:.1f}".format(uplift)
-                    else:
-                        uplift = "0.0"
+                if n_value >= 1_000_000:
+                    n = f"{n_value / 1_000_000:.1f}M"
+                elif n_value >= 1_000:
+                    n = f"{n_value / 1_000:.1f}K"
                 else:
-                    uplift = ""
+                    n = f"{n_value:,}"
+
+                median_val = metric_data.get("median", 0)
+                p75_val = metric_data.get("p75", 0)
+                p95_val = metric_data.get("p95", 0)
+                mean_val = metric_data.get("mean", 0)
 
                 # Handle missing se field - calculate if not present
                 se = metric_data.get("se", 0)
                 if se == 0 and n_value > 0:
-                    # Calculate standard error from std and n
                     std_val = metric_data.get("std", 0)
                     se = std_val / (n_value**0.5) if n_value > 0 else 0
-                se = "{0:.1f}".format(se)
-
-                std = "{0:.1f}".format(metric_data.get("std", 0))
-                mean = "{0:.1f}".format(metric_data.get("mean", 0))
 
                 dataset = {
                     "branch": branch_name,
-                    "mean": mean,
-                    "median": median,
-                    "uplift": uplift,
-                    "n": n,
-                    "se": se,
-                    "std": std,
                     "control": branch_name == control_name,
+                    "n": n,
+                    "median": format_value(median_val),
+                    "median_raw": median_val,
+                    "p75": format_value(p75_val),
+                    "p75_raw": p75_val,
+                    "p95": format_value(p95_val),
+                    "p95_raw": p95_val,
+                    "mean": format_value(mean_val),
+                    "mean_raw": mean_val,
+                    "std": f"{metric_data.get('std', 0):.1f}",
+                    "se": f"{se:.1f}",
                 }
+
+                # Default uplift fields to None so templates can use `is not none`
+                for key in ("median", "p75", "p95", "mean"):
+                    dataset[f"{key}_diff"] = None
+                    dataset[f"{key}_pct"] = None
+                    dataset[f"{key}_pct_raw"] = None
+                    dataset[f"{key}_combined"] = None
+
+                if branch_name != control_name and control_metric is not None:
+                    for key, branch_v in (
+                        ("median", median_val),
+                        ("p75", p75_val),
+                        ("p95", p95_val),
+                        ("mean", mean_val),
+                    ):
+                        control_v = control_metric.get(key, 0)
+                        diff = branch_v - control_v
+                        pct = (diff / control_v * 100.0) if control_v else 0.0
+                        diff_str = format_diff(diff)
+                        pct_str = format_pct(pct)
+                        dataset[f"{key}_diff"] = diff_str
+                        dataset[f"{key}_pct"] = pct_str
+                        dataset[f"{key}_pct_raw"] = pct
+                        dataset[f"{key}_combined"] = f"{diff_str} ({pct_str})"
+
+                    # Keep mean's percent uplift available for the chart label
+                    dataset["uplift"] = f"{dataset['mean_pct_raw']:.1f}"
 
                 if branch_name != control_name and "tests" in metric_data:
                     for test_name, test_data in metric_data["tests"].items():
@@ -1190,11 +1241,60 @@ class ReportGenerator:
 
                 datasets.append(dataset)
 
+        unit = self.get_metric_unit(metric)
+
+        # Build chart data: x-axis = percentile (median, p75),
+        # one series per branch so cross-branch comparison is grouped.
+        percentile_axes = (
+            ("median", "median_raw", "median_pct_raw"),
+            ("p75", "p75_raw", "p75_pct_raw"),
+        )
+
+        chart_datasets = []
+        for d in datasets:
+            is_control = d.get("control")
+            # For each branch, build one point per percentile.
+            points = []
+            for x_label, raw_key, pct_key in percentile_axes:
+                branch_value = d.get(raw_key, 0)
+                pct = d.get(pct_key)
+                # Find the control's value at the same percentile for diff calc.
+                control_value = next(
+                    (b.get(raw_key, 0) for b in datasets if b.get("control")), 0
+                )
+                diff = branch_value - control_value if not is_control else None
+                points.append(
+                    {
+                        "x": x_label,
+                        "y": branch_value,
+                        "uplift": (
+                            None
+                            if is_control or pct is None
+                            else f"{pct:.1f}"
+                        ),
+                        "diff": (
+                            None if is_control or diff is None else f"{diff:.2f}"
+                        ),
+                    }
+                )
+            chart_datasets.append({"label": d["branch"], "points": points})
+
+        charts = [
+            {
+                "id": "median-p75",
+                "label": "median + p75",
+                "x_labels": [name for name, _, _ in percentile_axes],
+                "datasets": chart_datasets,
+            }
+        ]
+
         context = {
             "segment": segment,
             "metric": metric,
             "branches": self.data["branches"],
             "datasets": datasets,
+            "unit": unit,
+            "charts": charts,
         }
         self.doc(t.render(context))
 
@@ -1345,8 +1445,8 @@ class ReportGenerator:
             self.createScalarComparison(segment, metric)
             return
 
-        # Add mean comparison
-        self.createMeanComparison(segment, metric, metric_type)
+        # Add numerical comparison (percentile table + median/p75 chart + stat tests)
+        self.createNumericalComparison(segment, metric, metric_type)
         # Add PDF and CDF comparison
         self.createCDFComparison(segment, metric, metric_type)
         # Add uplift comparison
@@ -1513,7 +1613,7 @@ class ReportGenerator:
         """Create all charts for numerical metrics."""
         # Create comprehensive charts like the original system
         # Use "numerical" as the metric_type for all chart methods
-        self.createMeanComparison(segment, metric, "numerical")
+        self.createNumericalComparison(segment, metric, "numerical")
         self.createCDFComparison(segment, metric, "numerical")
         self.createUpliftComparison(segment, metric, "numerical")
 

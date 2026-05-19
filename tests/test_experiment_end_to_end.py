@@ -221,7 +221,7 @@ class TestIntegrationWithArtificialData(unittest.TestCase):
         )
 
         # Check that we have the expected chart types somewhere in the HTML
-        chart_indicators = ["pdf", "cdf", "uplift", "diff", "mean"]
+        chart_indicators = ["pdf", "cdf", "uplift", "diff", "p75", "p95"]
         for indicator in chart_indicators:
             self.assertTrue(
                 indicator in html_content,
@@ -458,7 +458,7 @@ class TestIntegrationWithArtificialData(unittest.TestCase):
             )
 
             # Check that we have the expected chart types somewhere in the HTML
-            chart_indicators = ["pdf", "cdf", "uplift", "diff", "mean"]
+            chart_indicators = ["pdf", "cdf", "uplift", "diff", "p75", "p95"]
             for indicator in chart_indicators:
                 self.assertTrue(
                     indicator in html_content,
