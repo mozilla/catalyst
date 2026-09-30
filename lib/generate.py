@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import math
 import os
 import time
 from decimal import Decimal
@@ -111,6 +112,23 @@ def isValidMetricData(data, metric_name, branch, segment, source_section, data_t
     if data_type in ["numerical", "categorical"]:
         bins = data.get("bins", [])
         counts = data.get("counts", [])
+        # A negative bucket count can produce a negative variance and also crash
+        # np.repeat during subsampling. Reject the histogram rather than clamp
+        # its variance or silently change its distribution by dropping buckets.
+        reason = None
+        if len(bins) != len(counts):
+            reason = "histogram bins and counts have different lengths"
+        elif any(not math.isfinite(float(c)) or c < 0 for c in counts):
+            reason = "histogram counts must be finite and non-negative"
+        elif data_type == "numerical" and any(
+            not math.isfinite(float(b)) for b in bins
+        ):
+            reason = "histogram bins must be finite"
+        if reason:
+            print(
+                f"  WARNING: Skipping {branch}/{segment}: {source_section}.{metric_name} - {reason}"
+            )
+            return False
         if not bins or not counts or sum(counts) == 0:
             print(
                 f"  WARNING: Skipping {branch}/{segment}: {source_section}.{metric_name} - no data available"
