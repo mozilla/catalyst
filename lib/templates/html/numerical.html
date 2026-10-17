@@ -87,6 +87,9 @@
 </script>
 {% endfor %}
 
+{% if bootstrap_iterations %}
+<div style="font-size: 12px; color: #888; margin-bottom: 4px; text-align: right;">95% CIs computed via {{bootstrap_iterations}} bootstrap iterations</div>
+{% endif %}
 <table border="1" cellpadding="0" cellspacing="0" class="stat-table" style="table-layout: fixed; width: 100%;">
   <thead>
     <tr>
@@ -94,8 +97,10 @@
       <th style="font-size: 13px; padding: 8px;">N</th>
       <th style="font-size: 13px; padding: 8px;">Median{% if unit %} ({{unit}}){% endif %}</th>
       <th style="font-size: 13px; padding: 8px;">Median Uplift</th>
+      <th style="font-size: 13px; padding: 8px;">Median Uplift 95% CI</th>
       <th style="font-size: 13px; padding: 8px;">p75{% if unit %} ({{unit}}){% endif %}</th>
       <th style="font-size: 13px; padding: 8px;">p75 Uplift</th>
+      <th style="font-size: 13px; padding: 8px;">p75 Uplift 95% CI</th>
       <th style="font-size: 13px; padding: 8px;">Mean{% if unit %} ({{unit}}){% endif %}</th>
       <th style="font-size: 13px; padding: 8px;">Mean Uplift</th>
     </tr>
@@ -107,8 +112,10 @@
       <td style="padding: 6px; font-size: 13px;">{{dataset.n}}</td>
       <td style="padding: 6px; font-size: 13px;">{{dataset.median}}</td>
       <td style="padding: 6px; font-size: 13px;{% if dataset.median_pct_raw is not none and dataset.median_pct_raw >= 10 %} background-color: #ffcdd2; color: #c62828;{% elif dataset.median_pct_raw is not none and dataset.median_pct_raw <= -10 %} background-color: #c8e6c9; color: #2e7d32;{% endif %}">{% if dataset.median_combined %}{{dataset.median_combined}}{% else %}-{% endif %}</td>
+      <td style="padding: 6px; font-size: 13px; color: #555;">{% if dataset.median_lift_ci %}{{dataset.median_lift_ci}}{% else %}-{% endif %}</td>
       <td style="padding: 6px; font-size: 13px;">{{dataset.p75}}</td>
       <td style="padding: 6px; font-size: 13px;{% if dataset.p75_pct_raw is not none and dataset.p75_pct_raw >= 10 %} background-color: #ffcdd2; color: #c62828;{% elif dataset.p75_pct_raw is not none and dataset.p75_pct_raw <= -10 %} background-color: #c8e6c9; color: #2e7d32;{% endif %}">{% if dataset.p75_combined %}{{dataset.p75_combined}}{% else %}-{% endif %}</td>
+      <td style="padding: 6px; font-size: 13px; color: #555;">{% if dataset.p75_lift_ci %}{{dataset.p75_lift_ci}}{% else %}-{% endif %}</td>
       <td style="padding: 6px; font-size: 13px;">{{dataset.mean}}</td>
       <td style="padding: 6px; font-size: 13px;{% if dataset.mean_pct_raw is not none and dataset.mean_pct_raw >= 10 %} background-color: #ffcdd2; color: #c62828;{% elif dataset.mean_pct_raw is not none and dataset.mean_pct_raw <= -10 %} background-color: #c8e6c9; color: #2e7d32;{% endif %}">{% if dataset.mean_combined %}{{dataset.mean_combined}}{% else %}-{% endif %}</td>
     </tr>

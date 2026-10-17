@@ -1,6 +1,10 @@
 {% autoescape off %}
 <div id="summary" class="cell">
-  <div class="title">Summary:</div>
+  <div class="title">Summary:
+    <button id="export-json-btn" class="export-btn" title="Download the full results as JSON">
+      <i class="fa-solid fa-download"></i> Export JSON
+    </button>
+  </div>
 
   <table border="1" cellspacing="0" cellpadding="0" class="desc-table">
     <tbody>
@@ -141,9 +145,9 @@
     {% for data in metric.datasets %}
       <td style="{{data.style}}"><div style="{{data.color}};">{{data.branch}}</div></td>
       {% if data.p75_uplift %}
-      <td style="{{data.style}}"><div style="{% if data.median_color %}{{data.median_color}}{% else %}{{data.color}}{% endif %};">{{data.median_uplift}}{% if not data.skip_percent %}%{% endif %}</div></td>
-      <td style="{{data.style}}"><div style="{% if data.p75_color %}{{data.p75_color}}{% else %}{{data.color}}{% endif %};">{{data.p75_uplift}}{% if not data.skip_percent %}%{% endif %}</div></td>
-      <td style="{{data.style}}"><div style="{% if data.p95_color %}{{data.p95_color}}{% else %}{{data.color}}{% endif %};">{{data.p95_uplift}}{% if not data.skip_percent %}%{% endif %}</div></td>
+      <td style="{{data.style}}"><div style="{% if data.median_color %}{{data.median_color}}{% else %}{{data.color}}{% endif %};">{{data.median_uplift}}{% if not data.skip_percent %}%{% endif %}{% if data.median_lift_ci %}<br><span style="font-weight:normal; color:#888; font-size:0.85em;">{{data.median_lift_ci}}</span>{% endif %}</div></td>
+      <td style="{{data.style}}"><div style="{% if data.p75_color %}{{data.p75_color}}{% else %}{{data.color}}{% endif %};">{{data.p75_uplift}}{% if not data.skip_percent %}%{% endif %}{% if data.p75_lift_ci %}<br><span style="font-weight:normal; color:#888; font-size:0.85em;">{{data.p75_lift_ci}}</span>{% endif %}</div></td>
+      <td style="{{data.style}}"><div style="{% if data.p95_color %}{{data.p95_color}}{% else %}{{data.color}}{% endif %};">{{data.p95_uplift}}{% if not data.skip_percent %}%{% endif %}{% if data.p95_lift_ci %}<br><span style="font-weight:normal; color:#888; font-size:0.85em;">{{data.p95_lift_ci}}</span>{% endif %}</div></td>
       {% else %}
       <td colspan=3 style="{{data.style}}"><div style="{{data.color}};">{{data.uplift}}{% if not data.skip_percent %}%{% endif %}</div></td>
       {% endif %}
@@ -187,4 +191,19 @@
   </table>
 {% endfor %}
 </div> 
+<script>
+  document.getElementById('export-json-btn').addEventListener('click', function () {
+    var dataEl = document.getElementById('catalyst-export-data');
+    if (!dataEl) return;
+    var blob = new Blob([dataEl.textContent], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = '{{slug}}-export.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
+</script>
 {% endautoescape %}
