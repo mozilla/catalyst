@@ -4,6 +4,7 @@ import unittest
 import sys
 import os
 import tempfile
+import numpy as np
 import pandas as pd
 from unittest.mock import patch, MagicMock
 
@@ -320,9 +321,92 @@ class TestTelemetry(unittest.TestCase):
         }
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            # This should call sys.exit(1)
-            TelemetryClient(temp_dir, config, skipCache=False)
+            tc = TelemetryClient(temp_dir, config, skipCache=False)
+            # Auth is deferred — trigger it by accessing the client property
+            _ = tc.client
             mock_exit.assert_called_once_with(1)
+
+    @staticmethod
+    def _empty_results(branches, segments):
+        return {
+            b: {s: {"histograms": {}, "pageload_event_metrics": {}} for s in segments}
+            for b in branches
+        }
+
+    def test_replicates_stay_aligned_through_bucket_cleanup(self):
+        """Spurious-bucket removal, max-bucket overflow and "All" pooling must
+        keep each bucket's replicates with that bucket."""
+        config = {
+            "histograms": {"h": {"kind": "numerical", "max": 100}},
+            "pageload_event_metrics": {},
+        }
+        buckets = [1, 2, 3, 200, 300]  # 2 is spurious; 200 and 300 overflow
+        seg_counts = {
+            "Windows": [5000, 10, 4000, 100, 50],
+            "Mac": [3000, 10, 2000, 70, 30],
+        }
+        df = pd.DataFrame(
+            [
+                {
+                    "segment": segment,
+                    "branch": "control",
+                    "bucket": b,
+                    "counts": c,
+                    # Each replicate is a known multiple of its bucket's count.
+                    "bootstrap_replicates": np.array([c, 2.0 * c]),
+                }
+                for segment, counts in seg_counts.items()
+                for b, c in zip(buckets, counts)
+            ]
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = TelemetryClient(temp_dir, config)
+            results = self._empty_results(["control"], ["Windows", "Mac", "All"])
+            for segment in ("Windows", "All"):
+                client.collectResultsFromQuery_OS_segments(
+                    results, "control", segment, {}, {"h": df}
+                )
+                out = results["control"][segment]["histograms"]["h"]
+                self.assertEqual(out["bins"], [1, 3, 100])
+                for count, reps in zip(out["counts"], out["bootstrap_replicates"]):
+                    np.testing.assert_allclose(reps, [count, 2 * count])
+        self.assertEqual(
+            results["control"]["All"]["histograms"]["h"]["counts"], [8000, 6000, 250]
+        )
+
+    def test_sample_size_floor_drops_only_failing_segments(self):
+        config = {
+            "branches": [{"name": "control"}, {"name": "treatment"}],
+            "segments": ["Windows", "Mac", "All"],
+            "histograms": {
+                "h": {"kind": "numerical", "distribution_type": "timing_distribution"}
+            },
+            "pageload_event_metrics": {},
+        }
+        df = pd.DataFrame(
+            {
+                "segment": ["Windows", "Windows", "Mac", "Mac"],
+                "branch": ["control", "treatment"] * 2,
+                "bucket": [1, 1, 1, 1],
+                "counts": [60000, 60000, 60000, 10],
+            }
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = TelemetryClient(temp_dir, config)
+            self.assertTrue(client._passesSampleSizeFloor(df, "h"))
+            # A failing branch drops the segment for both, and "All" can't pool it.
+            self.assertEqual(client.droppedSegments["h"], {"Mac", "All"})
+
+            results = self._empty_results(["control", "treatment"], config["segments"])
+            for segment in config["segments"]:
+                client.collectResultsFromQuery_OS_segments(
+                    results, "control", segment, {}, {"h": df}
+                )
+            self.assertIn("h", results["control"]["Windows"]["histograms"])
+            self.assertNotIn("h", results["control"]["Mac"]["histograms"])
+            self.assertNotIn("h", results["control"]["All"]["histograms"])
+
+            self.assertFalse(client._passesSampleSizeFloor(df.assign(counts=10), "h"))
 
 
 if __name__ == "__main__":

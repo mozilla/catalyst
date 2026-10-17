@@ -97,6 +97,7 @@ class TestNonExperimentEndToEnd(unittest.TestCase):
             "segments": ["Windows", "Mac", "Linux"],
             "histograms": ["metrics.timing_distribution.performance_pageload_fcp"],
             "events": [{"pageload": {"fcp_time": {"max": 30000}}}],
+            "min_sample_size_override": 100,
         }
 
         with open(config_path, "w") as f:
@@ -284,6 +285,7 @@ performance_baseline AS (
             "segments": ["Windows", "Mac", "Linux", "Android"],
             "histograms": ["metrics.timing_distribution.performance_pageload_fcp"],
             "events": [{"pageload": {"fcp_time": {"max": 30000}}}],
+            "min_sample_size_override": 100,
         }
 
         with open(config_path, "w") as f:

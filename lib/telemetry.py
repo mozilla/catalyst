@@ -1,10 +1,27 @@
 import os
 import sys
+import numpy as np
 import pandas as pd
 from google.cloud import bigquery
 from django.template.loader import get_template
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+from lib.thresholds import (
+    get_min_sample_size,
+    BOOTSTRAP_ITERATIONS,
+    DEFAULT_BOOTSTRAP_MODE,
+)
+from lib.analysis import bootstrap_stream, compute_client_cluster_bootstrap
+
+
+def arrowBatches(job):
+    """Query results as a stream of Arrow batches over the Storage API, so a
+    release-scale pull is bootstrapped in pieces instead of held whole."""
+    from google.cloud import bigquery_storage
+
+    return job.result().to_arrow_iterable(
+        bqstorage_client=bigquery_storage.BigQueryReadClient()
+    )
 
 
 def clean_sql_query(query):
@@ -56,7 +73,14 @@ def invalidDataSet(df, histogram, branches, segments):
     return False
 
 
-def getInvalidBranchSegments(df, histogram, branches, segments, min_sample_size=1000):
+def getInvalidBranchSegments(
+    df, histogram, branches, segments, distribution_type="", kind="", override=None
+):
+    min_sample_size = (
+        override
+        if override is not None
+        else get_min_sample_size(distribution_type, kind)
+    )
     invalid_combinations = []
 
     for branch in branches:
@@ -92,6 +116,26 @@ def getInvalidBranchSegments(df, histogram, branches, segments, min_sample_size=
                     invalid_combinations.append((branch_name, segment))
 
     return invalid_combinations
+
+
+def bootstrapRowsForSegment(df, branch, segment):
+    """(buckets, counts, replicates) for one branch/segment of bootstrap
+    output; "All" sums every segment bucket by bucket."""
+    if segment != "All":
+        subset = df[(df["segment"] == segment) & (df["branch"] == branch)]
+        return (
+            list(subset["bucket"]),
+            list(subset["counts"]),
+            list(subset["bootstrap_replicates"]),
+        )
+    sub = df[df["branch"] == branch]
+    buckets = sorted(sub["bucket"].unique().tolist())
+    counts, replicates = [], []
+    for b in buckets:
+        rows = sub[sub["bucket"] == b]
+        counts.append(rows["counts"].sum())
+        replicates.append(np.stack(rows["bootstrap_replicates"].to_numpy()).sum(axis=0))
+    return buckets, counts, replicates
 
 
 def segments_are_all_OS(segments):
@@ -133,11 +177,14 @@ class TelemetryClient:
     """
 
     def __init__(self, dataDir: str, config: dict, skipCache: bool = False):
-        self.client = bigquery.Client()
+        self._client = None  # lazy-initialized on first query
         self.config = config
         self.dataDir = dataDir
         self.skipCache = skipCache
+        self.prefetchedHistograms = {}
         self.queries = []
+        # histogram -> segments dropped by the sample-size floor
+        self.droppedSegments = {}
 
         # Configure parallel query execution
         # Default to 4 threads - good balance between performance and resource usage
@@ -146,42 +193,34 @@ class TelemetryClient:
         # Ensure data directory exists
         os.makedirs(dataDir, exist_ok=True)
 
-        # Check authentication early to provide clear error message
-        self._check_authentication()
-
-    def _check_authentication(self):
-        """
-        Check if BigQuery authentication is properly configured.
-
-        Raises:
-            SystemExit: If authentication is not properly configured
-        """
-        try:
-            # Try a simple query to test authentication
-            # Use a minimal query that should work if authenticated
-            query = "SELECT 1 as test_auth LIMIT 1"
-            job = self.client.query(query)
-            # Don't wait for results, just check if the job was created
-            job.result(max_results=1)
-        except Exception as e:
-            error_message = str(e).lower()
-            if (
-                "reauthentication is needed" in error_message
-                or "authentication" in error_message
-            ):
-                print("\n❌ BigQuery Authentication Error")
-                print(
-                    "Your Google Cloud authentication has expired or is not configured."
-                )
-                print("\nTo fix this, please run:")
-                print("  gcloud auth application-default login")
-                print("\nThen try running this command again.")
-                sys.exit(1)
-            else:
-                # Some other error - let it propagate normally
-                print(f"\n❌ Error testing BigQuery connection: {e}")
-                print("Please check your Google Cloud configuration.")
-                sys.exit(1)
+    @property
+    def client(self):
+        if self._client is None:
+            try:
+                self._client = bigquery.Client()
+                # Verify auth on first use
+                job = self._client.query("SELECT 1 AS test_auth LIMIT 1")
+                job.result(max_results=1)
+            except Exception as e:
+                error_message = str(e).lower()
+                if (
+                    "reauthentication is needed" in error_message
+                    or "authentication" in error_message
+                    or "project was not passed" in error_message
+                ):
+                    print("\n❌ BigQuery Authentication Error")
+                    print(
+                        "Your Google Cloud authentication has expired or is not configured."
+                    )
+                    print("\nTo fix this, please run:")
+                    print("  gcloud auth application-default login")
+                    print("\nThen try running this command again.")
+                    sys.exit(1)
+                else:
+                    print(f"\n❌ Error testing BigQuery connection: {e}")
+                    print("Please check your Google Cloud configuration.")
+                    sys.exit(1)
+        return self._client
 
     def _get_single_os_filter(self):
         """
@@ -364,6 +403,35 @@ class TelemetryClient:
             # Manual percentage - convert to threshold/modulus format
             return sampling_config, None
 
+    def _bootstrapIterations(self):
+        mode = self.config.get("bootstrap_mode", DEFAULT_BOOTSTRAP_MODE)
+        return BOOTSTRAP_ITERATIONS.get(
+            mode, BOOTSTRAP_ITERATIONS[DEFAULT_BOOTSTRAP_MODE]
+        )
+
+    def _insufficientSampleSegments(self, df, histogram):
+        hist_config = self.config["histograms"].get(histogram, {})
+        return getInvalidBranchSegments(
+            df,
+            histogram,
+            self.config["branches"],
+            self.config["segments"],
+            distribution_type=hist_config.get("distribution_type", ""),
+            kind=hist_config.get("kind", ""),
+            override=self.config.get("min_sample_size_override"),
+        )
+
+    def _passesSampleSizeFloor(self, df, histogram):
+        """Records segments below the sample-size floor so only they are
+        skipped; False if none survive. Dropping any segment also drops "All",
+        which would otherwise silently pool fewer segments."""
+        invalid = self._insufficientSampleSegments(df, histogram)
+        if not invalid:
+            return True
+        dropped = {segment for _, segment in invalid} | {"All"}
+        self.droppedSegments[histogram] = dropped
+        return any(s not in dropped for s in self.config["segments"])
+
     def _processHistogramsInParallel(self, histograms_to_process, is_experiment=True):
         """Process histograms in parallel using ThreadPoolExecutor."""
         if self.max_workers <= 1 or len(histograms_to_process) <= 1:
@@ -407,6 +475,11 @@ class TelemetryClient:
                     ):
                         print(f"Empty dataset found, marking for removal: {histogram}")
                         remove.append(histogram)
+                    elif not self._passesSampleSizeFloor(df, histogram):
+                        print(
+                            f"Insufficient sample size, marking for removal: {histogram}"
+                        )
+                        remove.append(histogram)
                     else:
                         histograms[histogram] = df
 
@@ -433,6 +506,9 @@ class TelemetryClient:
                     df, histogram, self.config["branches"], self.config["segments"]
                 ):
                     print(f"Empty dataset found, marking for removal: {histogram}")
+                    remove.append(histogram)
+                elif not self._passesSampleSizeFloor(df, histogram):
+                    print(f"Insufficient sample size, marking for removal: {histogram}")
                     remove.append(histogram)
                 else:
                     histograms[histogram] = df
@@ -465,8 +541,17 @@ class TelemetryClient:
                 == "quantity_percentiles"
             ):
                 continue
+            if segment in self.droppedSegments.get(histogram, ()):
+                continue
             df = histograms[histogram]
-            if segment == "All":
+            kind = self.config["histograms"][histogram]["kind"]
+            replicates = None
+            if kind == "numerical" and "bootstrap_replicates" in df.columns:
+                buckets, counts, replicates = bootstrapRowsForSegment(
+                    df, branch, segment
+                )
+                sample_counts = None
+            elif segment == "All":
                 subset = (
                     df[df["branch"] == branch][["bucket", "counts", "sample_count"]]
                     .groupby(["bucket"])
@@ -483,7 +568,7 @@ class TelemetryClient:
 
             # Some clients report bucket sizes that are not real, and these buckets
             # end up having 1-5 samples in them.  Filter these out entirely.
-            if self.config["histograms"][histogram]["kind"] == "numerical":
+            if kind == "numerical":
                 remove = []
                 for i in range(1, len(counts) - 1):
                     if (counts[i - 1] > 1000 and counts[i] < counts[i - 1] / 100) or (
@@ -495,6 +580,8 @@ class TelemetryClient:
                     del counts[i]
                     if sample_counts:
                         del sample_counts[i]
+                    if replicates is not None:
+                        del replicates[i]
 
             # Add labels to the buckets for categorical histograms.
             if self.config["histograms"][histogram]["kind"] == "categorical":
@@ -533,6 +620,7 @@ class TelemetryClient:
                 remove = []
                 maxBucketCount = 0
                 maxBucketSampleCount = 0
+                maxBucketReplicates = None
                 for i, x in enumerate(buckets):
                     if x >= maxBucket:
                         remove.append(i)
@@ -541,20 +629,35 @@ class TelemetryClient:
                             maxBucketSampleCount = (
                                 maxBucketSampleCount + sample_counts[i]
                             )
+                        if replicates is not None:
+                            maxBucketReplicates = (
+                                replicates[i]
+                                if maxBucketReplicates is None
+                                else maxBucketReplicates + replicates[i]
+                            )
                 for i in sorted(remove, reverse=True):
                     del buckets[i]
                     del counts[i]
                     if sample_counts:
                         del sample_counts[i]
+                    if replicates is not None:
+                        del replicates[i]
                 buckets.append(maxBucket)
                 counts.append(maxBucketCount)
                 if sample_counts:
                     sample_counts.append(maxBucketSampleCount)
+                if replicates is not None and maxBucketReplicates is not None:
+                    replicates.append(maxBucketReplicates)
 
             assert len(buckets) == len(counts)
             results[branch][segment]["histograms"][histogram] = {}
             results[branch][segment]["histograms"][histogram]["bins"] = buckets
             results[branch][segment]["histograms"][histogram]["counts"] = counts
+            if replicates is not None:
+                assert len(replicates) == len(buckets)
+                results[branch][segment]["histograms"][histogram][
+                    "bootstrap_replicates"
+                ] = replicates
             if sample_counts:
                 results[branch][segment]["histograms"][histogram][
                     "sample_counts"
@@ -563,7 +666,12 @@ class TelemetryClient:
 
         for metric in self.config["pageload_event_metrics"]:
             df = event_metrics[metric]
-            if segment == "All":
+            replicates = None
+            if "bootstrap_replicates" in df.columns:
+                buckets, counts, replicates = bootstrapRowsForSegment(
+                    df, branch, segment
+                )
+            elif segment == "All":
                 subset = (
                     df[df["branch"] == branch][["bucket", "counts"]]
                     .groupby(["bucket"])
@@ -582,6 +690,11 @@ class TelemetryClient:
             results[branch][segment]["pageload_event_metrics"][metric][
                 "counts"
             ] = counts
+            if replicates is not None:
+                assert len(replicates) == len(buckets)
+                results[branch][segment]["pageload_event_metrics"][metric][
+                    "bootstrap_replicates"
+                ] = replicates
             print(
                 f"    segment={segment} len(pageload event: {metric}) = ", len(buckets)
             )
@@ -682,6 +795,8 @@ class TelemetryClient:
                 quantity_percentiles[hist] = self.config["histograms"][hist]
             else:
                 regular_histograms[hist] = self.config["histograms"][hist]
+
+        self._prefetchBatchedNumericalHistograms(regular_histograms)
 
         # Get data for regular histograms
         histograms, remove = self._processHistogramsInParallel(
@@ -823,6 +938,35 @@ class TelemetryClient:
         self.queries.append({"name": f"Pageload event: {metric}", "query": query})
         return query
 
+    def generatePageloadEventQuery_OS_segments_document_arrays(self, metric):
+        """Per-document_id bucket arrays for a pageload event metric. The
+        pageload ping has no client_id, so documents are the cluster unit."""
+        t = get_template(
+            "experiment/glean/pageload_events_os_segments_document_arrays.sql"
+        )
+
+        metricMin = self.config["pageload_event_metrics"][metric]["min"]
+        metricMax = self.config["pageload_event_metrics"][metric]["max"]
+
+        context = {
+            "include_non_enrolled_branch": self.config["include_non_enrolled_branch"],
+            "minVal": metricMin,
+            "maxVal": metricMax,
+            "slug": self.config["slug"],
+            "channel": self.config["channel"],
+            "startDate": self.config["startDate"],
+            "endDate": self.config["endDate"],
+            "metric": metric,
+            "pageload_event_filter": self.config.get("pageload_event_filter"),
+            "single_os_filter": self._get_single_os_filter(),
+        }
+        query = t.render(context)
+        query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
+        self.queries.append(
+            {"name": f"Pageload event (document arrays): {metric}", "query": query}
+        )
+        return query
+
     # Not currently used, and not well supported.
     def generatePageloadEventQuery_Generic(self):
         t = get_template("archived/events_generic.sql")
@@ -910,6 +1054,79 @@ class TelemetryClient:
         query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
         self.queries.append({"name": f"Histogram: {histogram}", "query": query})
         return query
+
+    def generateHistogramQuery_OS_segments_client_arrays_glean(self, histogram_list):
+        """One query pulling per-client bucket arrays for numerical histograms
+        that share platform availability."""
+        t = get_template("experiment/glean/histogram_os_segments_client_arrays.sql")
+
+        first = histogram_list[0]
+        histograms = [
+            {
+                "name": h,
+                "alias": f"hist_{i}",
+                "distribution_type": self.config["histograms"][h].get(
+                    "distribution_type"
+                ),
+            }
+            for i, h in enumerate(histogram_list)
+        ]
+
+        context = {
+            "include_non_enrolled_branch": self.config["include_non_enrolled_branch"],
+            "slug": self.config["slug"],
+            "channel": self.config["channel"],
+            "startDate": self.config["startDate"],
+            "endDate": self.config["endDate"],
+            "available_on_desktop": self.config["histograms"][first][
+                "available_on_desktop"
+            ],
+            "available_on_android": self.config["histograms"][first][
+                "available_on_android"
+            ],
+            "single_os_filter": self._get_single_os_filter(),
+            "histograms": histograms,
+        }
+        query = t.render(context)
+        query = "".join([s for s in query.strip().splitlines(True) if s.strip()])
+        self.queries.append(
+            {
+                "name": f"Client-array histograms: {', '.join(histogram_list)}",
+                "query": query,
+            }
+        )
+        return query
+
+    def getHistogramDataClientArrays(self, config, histogram_list):
+        """Fetches a histogram group in one query, bootstraps each metric, and
+        caches each to the per-metric pickle getHistogramData reads."""
+        slug = config["slug"]
+        filenames = {
+            h: os.path.join(self.dataDir, f"{slug}-{h.split('.')[-1]}.pkl")
+            for h in histogram_list
+        }
+
+        cached = {h: self.checkForExistingData(f) for h, f in filenames.items()}
+        if all(df is not None for df in cached.values()):
+            self.prefetchedHistograms.update(cached)
+            return cached
+
+        query = self.generateHistogramQuery_OS_segments_client_arrays_glean(
+            histogram_list
+        )
+        print("Running client-array query:\n" + query)
+        job = self.client.query(query)
+        result = bootstrap_stream(
+            arrowBatches(job),
+            n_bootstrap=self._bootstrapIterations(),
+            slug=slug,
+            metric_names=histogram_list,
+        )
+        for h, df in result.items():
+            print(f"Writing '{slug}' histogram results for {h} to disk.")
+            df.to_pickle(filenames[h])
+        self.prefetchedHistograms.update(result)
+        return result
 
     def generateHistogramQuery_OS_segments_non_experiment_legacy(self, histogram):
         t = get_template("other/legacy/histogram_os_segments.sql")
@@ -1144,6 +1361,11 @@ class TelemetryClient:
         hist_name = histogram.split(".")[-1]
         filename = os.path.join(self.dataDir, f"{slug}-{hist_name}.pkl")
 
+        # Served from memory, not the cache file, so --skip-cache doesn't
+        # refetch what the batched query just produced.
+        if histogram in self.prefetchedHistograms:
+            return self.prefetchedHistograms[histogram]
+
         df = self.checkForExistingData(filename)
         if df is not None:
             return df
@@ -1165,6 +1387,32 @@ class TelemetryClient:
         print(f"Writing '{slug}' histogram results for {histogram} to disk.")
         df.to_pickle(filename)
         return df
+
+    def _prefetchBatchedNumericalHistograms(self, regular_histograms):
+        """Pre-warms the per-metric cache for numerical Glean histograms, one
+        query per platform-availability group, so getHistogramData never runs
+        the flat query for them."""
+        if not segments_are_all_OS(self.config["segments"]):
+            return
+
+        groups = {}
+        for h in regular_histograms:
+            hist_config = regular_histograms[h]
+            if hist_config.get("kind") != "numerical" or not hist_config.get("glean"):
+                continue
+            key = (
+                hist_config["available_on_desktop"],
+                hist_config["available_on_android"],
+            )
+            groups.setdefault(key, []).append(h)
+
+        for key, histogram_list in groups.items():
+            print(
+                f"Fetching {len(histogram_list)} numerical histogram(s) via the "
+                f"client-cluster bootstrap path for "
+                f"available_on_desktop/android={key}: {histogram_list}"
+            )
+            self.getHistogramDataClientArrays(self.config, histogram_list)
 
     def generateLabeledPercentilesQuery_OS_segments_glean(self, histogram):
         t = get_template("experiment/glean/labeled_percentiles_os_segments.sql")
@@ -1380,21 +1628,27 @@ class TelemetryClient:
         if df is not None:
             return df
 
-        if segments_are_all_OS(self.config["segments"]):
-            query = self.generatePageloadEventQuery_OS_segments(metric)
-        else:
-            # query = self.generatePageloadEventQuery_Generic()
+        if not segments_are_all_OS(self.config["segments"]):
             print("No current support for generic pageload event queries.")
             sys.exit(1)
+
+        query = self.generatePageloadEventQuery_OS_segments_document_arrays(metric)
 
         print("Running query:\n" + query)
         import time
 
         start_time = time.time()
         job = self.client.query(query)
-        df = job.to_dataframe()
+        df = compute_client_cluster_bootstrap(
+            arrowBatches(job),
+            n_bootstrap=self._bootstrapIterations(),
+            slug=slug,
+            metric_name=metric,
+            unit_col="document_id",
+        )
         query_time = time.time() - start_time
         print(f"Query completed in {query_time:.1f} seconds")
+
         print(f"Writing '{slug}' pageload event results to disk.")
         df.to_pickle(filename)
         return df
