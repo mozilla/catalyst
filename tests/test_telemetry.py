@@ -382,6 +382,7 @@ class TestTelemetry(unittest.TestCase):
                 "h": {"kind": "numerical", "distribution_type": "timing_distribution"}
             },
             "pageload_event_metrics": {},
+            "enable_bootstrap_ci": True,
         }
         df = pd.DataFrame(
             {

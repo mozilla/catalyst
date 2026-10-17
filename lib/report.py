@@ -5,6 +5,7 @@ from django.template.loader import get_template
 from airium import Airium
 from bs4 import BeautifulSoup as bs
 from lib.analysis import calc_cdf_band
+from lib.thresholds import DEFAULT_ENABLE_BOOTSTRAP_CI
 
 
 PAGELOAD_CI_NOTE = (
@@ -35,6 +36,40 @@ def get_rank_biserial_corr_meaning(r):
         return "Medium"
     else:
         return "Large"
+
+
+def get_summary_color(
+    uplift_pct, lift_ci, effect_meaning, higher_is_better, enable_bootstrap_ci
+):
+    # Flag on, significant means the lift CI excludes zero; the MWU ignores
+    # client clustering. Both paths need a 1.5% lift to color anything.
+    if enable_bootstrap_ci:
+        if not lift_ci or lift_ci.get("lower") is None:
+            return "font-weight: normal"
+        if lift_ci["lower"] <= 0 <= lift_ci["upper"]:
+            return "font-weight: normal"
+    elif effect_meaning in ("None", "Small"):
+        return "font-weight: normal"
+
+    if abs(uplift_pct) < 1.5:
+        return "font-weight: normal"
+    improved = (uplift_pct > 0) == higher_is_better
+    return f"font-weight: bold; color: {'green' if improved else 'red'}"
+
+
+def get_ci_significance(metric_data):
+    # Lists the percentiles whose bootstrap lift CI excludes zero.
+    cis = {
+        name: metric_data.get(f"{name}_lift_ci")
+        for name in ("median", "p75", "p95")
+    }
+    cis = {k: v for k, v in cis.items() if v and v.get("lower") is not None}
+    if not cis:
+        return "No CI"
+    significant = [
+        name for name, ci in cis.items() if not ci["lower"] <= 0 <= ci["upper"]
+    ]
+    return ", ".join(significant) if significant else "None"
 
 
 # CubicSpline requires a monotonically increasing x.
@@ -120,6 +155,9 @@ class ReportGenerator:
         self.data = data
         self.doc = Airium()
         self.export_data = {"segments": {}}
+        self.enable_bootstrap_ci = data.get("input", {}).get(
+            "enable_bootstrap_ci", DEFAULT_ENABLE_BOOTSTRAP_CI
+        )
 
     def _recordExport(self, segment, metric, metric_type, payload):
         """Curated per-metric summary for the Export JSON button."""
@@ -763,12 +801,25 @@ class ReportGenerator:
                                     )
                                     effect = f"{effect_meaning} (p={pval:.2f})"
 
-                                    if pval >= 0.05:
+                                    if pval >= 0.001:
                                         effect = f"None (p={pval:.2f})"
                                         effect_meaning = "None"
                                 else:
                                     effect = "No test"
                                     effect_meaning = "None"
+
+                                # Pageload CIs cluster by document_id, far narrower
+                                # than client-level ones, so they neither color nor
+                                # claim significance.
+                                no_color = self.enable_bootstrap_ci and metric in (
+                                    self.data.get("input", {}).get(
+                                        "pageload_event_metrics", {}
+                                    )
+                                )
+                                if no_color:
+                                    effect = "Not assessed"
+                                elif self.enable_bootstrap_ci:
+                                    effect = get_ci_significance(metric_data)
 
                                 full_hist_name = None
                                 for hist_key in self.data.get("histograms", {}):
@@ -785,22 +836,20 @@ class ReportGenerator:
                                         full_hist_name
                                     ].get("higher_is_better", False)
 
-                                def _color_for(uplift_pct):
-                                    if effect_meaning in ("None", "Small"):
+                                def _color_for(uplift_pct, ci_key):
+                                    if no_color:
                                         return "font-weight: normal"
-                                    if higher_is_better:
-                                        if uplift_pct >= 1.5:
-                                            return "font-weight: bold; color: green"
-                                        elif uplift_pct <= -1.5:
-                                            return "font-weight: bold; color: red"
-                                    else:
-                                        if uplift_pct >= 1.5:
-                                            return "font-weight: bold; color: red"
-                                        elif uplift_pct <= -1.5:
-                                            return "font-weight: bold; color: green"
-                                    return "font-weight: normal"
+                                    return get_summary_color(
+                                        uplift_pct,
+                                        metric_data.get(ci_key),
+                                        effect_meaning,
+                                        higher_is_better,
+                                        self.enable_bootstrap_ci,
+                                    )
 
-                                median_color = _color_for(median_uplift_pct)
+                                median_color = _color_for(
+                                    median_uplift_pct, "median_lift_ci"
+                                )
 
                                 datasets.append(
                                     {
@@ -815,8 +864,12 @@ class ReportGenerator:
                                         "p75_lift_ci": format_lift_ci(metric_data.get("p75_lift_ci")),
                                         "p95_lift_ci": format_lift_ci(metric_data.get("p95_lift_ci")),
                                         "median_color": median_color,
-                                        "p75_color": _color_for(p75_uplift_pct),
-                                        "p95_color": _color_for(p95_uplift_pct),
+                                        "p75_color": _color_for(
+                                            p75_uplift_pct, "p75_lift_ci"
+                                        ),
+                                        "p95_color": _color_for(
+                                            p95_uplift_pct, "p95_lift_ci"
+                                        ),
                                         "std": std,
                                         "effect": effect,
                                         "color": median_color,
@@ -909,6 +962,7 @@ class ReportGenerator:
             "branches": branches,
             "segments": segments,
             "branchlen": len(branches),
+            "enable_bootstrap_ci": self.enable_bootstrap_ci,
         }
         self.doc(t.render(context))
 
@@ -1390,6 +1444,7 @@ class ReportGenerator:
             "unit": unit,
             "charts": charts,
             "bootstrap_iterations": bootstrap_iterations,
+            "enable_bootstrap_ci": self.enable_bootstrap_ci,
         }
         self.doc(t.render(context))
 
@@ -1664,7 +1719,11 @@ class ReportGenerator:
             ].get("pageload_event_metrics", {})
             with self.doc.div(klass="title"):
                 self.doc(f"({segment}) - {metric}")
-                if data_type == "numerical" and is_pageload_event_metric:
+                if (
+                    self.enable_bootstrap_ci
+                    and data_type == "numerical"
+                    and is_pageload_event_metric
+                ):
                     self.doc.i(
                         klass="fa-solid fa-circle-info ci-note",
                         title=PAGELOAD_CI_NOTE,

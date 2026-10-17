@@ -123,9 +123,15 @@
           </div>
         </th>
         <th>
+          {% if enable_bootstrap_ci %}
+          <div class="tooltip">significant at
+            <span class="tooltiptext">Percentiles whose 95% lift CI excludes zero. Crash and categorical rows show the size of the change only, with no significance test.</span>
+          </div>
+          {% else %}
           <div class="tooltip">effect size (mwu)
             <span class="tooltiptext">Effect size calculated by Rank Biserial Correlation.</span>
           </div>
+          {% endif %}
         </th>
       </tr>
     </thead>

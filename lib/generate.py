@@ -12,6 +12,7 @@ from django.conf import settings
 from lib.telemetry import TelemetryClient
 from lib.analysis import DataAnalyzer
 from lib.report import ReportGenerator
+from lib.thresholds import DEFAULT_ENABLE_BOOTSTRAP_CI
 
 
 class NpEncoder(json.JSONEncoder):
@@ -82,6 +83,15 @@ def getResultsForExperiment(slug, dataDir, config, skipCache):
 
     results["queries"] = telemetryData["queries"]
     return results
+
+
+def resultsMatchBootstrapFlag(results, config):
+    """Saved results are only reusable under the enable_bootstrap_ci setting
+    they were generated with."""
+    saved = results.get("input", {}).get(
+        "enable_bootstrap_ci", DEFAULT_ENABLE_BOOTSTRAP_CI
+    )
+    return saved == config.get("enable_bootstrap_ci", DEFAULT_ENABLE_BOOTSTRAP_CI)
 
 
 def checkForLocalResults(resultsFile):
@@ -360,6 +370,9 @@ def generate_report(args):
         results = None
     else:
         results = checkForLocalResults(resultsFile)
+        if results is not None and not resultsMatchBootstrapFlag(results, config):
+            print("Cached results used a different enable_bootstrap_ci; regenerating.")
+            results = None
 
     # If results not found, generate them.
     if results is None:

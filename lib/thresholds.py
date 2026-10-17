@@ -8,6 +8,10 @@ BOOTSTRAP_ITERATIONS = {
 }
 DEFAULT_BOOTSTRAP_MODE = "production"
 
+# Temporary per-report flag (`enable_bootstrap_ci` in the experiment YAML)
+# gating everything the bootstrap CI upgrade changes. Remove once trusted.
+DEFAULT_ENABLE_BOOTSTRAP_CI = False
+
 # Minimum observations per branch/segment before a histogram is reported.
 MIN_SAMPLE_SIZE = {
     "timing_distribution": 50000,
