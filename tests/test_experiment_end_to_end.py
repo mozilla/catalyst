@@ -335,6 +335,7 @@ class TestIntegrationWithArtificialData(unittest.TestCase):
                 "include_non_enrolled_branch": False,
                 "histograms": ["metrics.timing_distribution.performance_pageload_fcp"],
                 "events": [{"pageload": {"fcp_time": {"max": 30000}}}],
+                "min_sample_size_override": 100,
             }
 
             with open(rollout_config_path, "w") as f:

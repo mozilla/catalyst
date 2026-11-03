@@ -9,6 +9,7 @@ Django==5.2.17
 google-api-core==2.24.0
 google-auth==2.37.0
 google-cloud-bigquery==3.29.0
+google-cloud-bigquery-storage==2.39.0
 google-cloud-core==2.4.1
 google-crc32c==1.6.0
 google-resumable-media==2.7.2

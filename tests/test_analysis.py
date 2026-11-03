@@ -4,6 +4,9 @@ import unittest
 import sys
 import os
 
+import numpy as np
+import pandas as pd
+
 # Add the parent directory to sys.path to import lib.analysis
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -22,6 +25,7 @@ from lib.analysis import (
     createNumericalTemplate,
     createCategoricalTemplate,
     createScalarTemplate,
+    compute_client_cluster_bootstrap,
 )
 
 
@@ -224,6 +228,117 @@ class TestAnalysis(unittest.TestCase):
         basic_keys = ["count", "n"]
         for key in basic_keys:
             self.assertIn(key, result)
+
+    def test_compute_client_cluster_bootstrap_client_id(self):
+        """Metrics-ping shape: one row per (client_id, segment, branch)."""
+        df = pd.DataFrame(
+            [
+                {
+                    "client_id": "c1",
+                    "segment": "Windows",
+                    "branch": "control",
+                    "bucket_counts": [
+                        {"bucket": 10, "counts": 5},
+                        {"bucket": 20, "counts": 3},
+                    ],
+                },
+                {
+                    "client_id": "c2",
+                    "segment": "Windows",
+                    "branch": "control",
+                    "bucket_counts": [
+                        {"bucket": 10, "counts": 2},
+                        {"bucket": 30, "counts": 4},
+                    ],
+                },
+                {
+                    "client_id": "c3",
+                    "segment": "Windows",
+                    "branch": "treatment",
+                    "bucket_counts": [{"bucket": 10, "counts": 6}],
+                },
+            ]
+        )
+
+        result = compute_client_cluster_bootstrap(
+            df, n_bootstrap=2000, slug="test-slug", metric_name="test_metric"
+        )
+
+        self.assertIn("bootstrap_replicates", result.columns)
+        control = result[result["branch"] == "control"].set_index("bucket")
+        self.assertEqual(sorted(control.index), [10, 20, 30])
+        self.assertEqual(control.loc[10, "counts"], 7)
+        self.assertEqual(control.loc[20, "counts"], 3)
+        self.assertEqual(control.loc[30, "counts"], 4)
+
+        # Mean-1 Exponential weights: averaged over many bootstrap draws, the
+        # replicate mean for a bucket should track its raw (unweighted) count.
+        for bucket, row in control.iterrows():
+            reps = row["bootstrap_replicates"]
+            self.assertEqual(len(reps), 2000)
+            self.assertAlmostEqual(np.mean(reps) / row["counts"], 1.0, delta=0.25)
+
+    def test_compute_client_cluster_bootstrap_document_id_unit_col(self):
+        """Pageload-ping shape: same engine, clustered by document_id since
+        this ping carries no client_id."""
+        df = pd.DataFrame(
+            [
+                {
+                    "document_id": "d1",
+                    "segment": "Windows",
+                    "branch": "control",
+                    "bucket_counts": [{"bucket": 100, "counts": 4}],
+                },
+                {
+                    "document_id": "d2",
+                    "segment": "Windows",
+                    "branch": "control",
+                    "bucket_counts": [
+                        {"bucket": 100, "counts": 6},
+                        {"bucket": 200, "counts": 1},
+                    ],
+                },
+            ]
+        )
+
+        result = compute_client_cluster_bootstrap(
+            df,
+            n_bootstrap=300,
+            slug="test-slug",
+            metric_name="fcp_time",
+            unit_col="document_id",
+        )
+
+        self.assertEqual(set(result["bucket"]), {100, 200})
+        bucket_100 = result[result["bucket"] == 100].iloc[0]
+        self.assertEqual(bucket_100["counts"], 10)
+        self.assertEqual(len(bucket_100["bootstrap_replicates"]), 300)
+
+    def test_compute_client_cluster_bootstrap_deterministic(self):
+        """Same slug/metric/branch seeds identically across calls, so CI
+        bounds don't jitter between report re-renders."""
+        df = pd.DataFrame(
+            [
+                {
+                    "client_id": "c1",
+                    "segment": "Mac",
+                    "branch": "control",
+                    "bucket_counts": [{"bucket": 5, "counts": 10}],
+                },
+            ]
+        )
+
+        first = compute_client_cluster_bootstrap(
+            df, n_bootstrap=50, slug="s", metric_name="m"
+        )
+        second = compute_client_cluster_bootstrap(
+            df, n_bootstrap=50, slug="s", metric_name="m"
+        )
+
+        np.testing.assert_array_equal(
+            first.iloc[0]["bootstrap_replicates"],
+            second.iloc[0]["bootstrap_replicates"],
+        )
 
 
 if __name__ == "__main__":

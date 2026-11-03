@@ -39,5 +39,29 @@
   $("#leftside-navigation ul ul").slideUp(), $(this).next().is(":visible") || $(this).next().slideDown(),
   e.stopPropagation();
 });
+
+$(function () {
+  var navLinks = document.querySelectorAll('#leftside-navigation a[href^="#"]');
+  var linkByHash = {};
+  navLinks.forEach(function (a) { linkByHash[a.getAttribute('href')] = a; });
+
+  var observer = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (!entry.isIntersecting) return;
+      var link = linkByHash['#' + entry.target.id];
+      if (!link) return;
+
+      $('#leftside-navigation li').removeClass('active');
+      $(link).closest('li').addClass('active');
+
+      var submenu = link.closest('ul ul');
+      if (submenu) {
+        $(submenu).closest('li.sub-menu').addClass('active');
+      }
+    });
+  }, { root: null, rootMargin: '-10% 0px -75% 0px', threshold: 0 });
+
+  document.querySelectorAll('.cell[id]').forEach(function (s) { observer.observe(s); });
+});
 </script>
 {% endautoescape %}

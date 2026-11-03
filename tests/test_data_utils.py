@@ -428,6 +428,7 @@ def create_test_config(slug, config_overrides=None):
                 }
             }
         ],
+        "min_sample_size_override": 100,
     }
 
     if config_overrides:

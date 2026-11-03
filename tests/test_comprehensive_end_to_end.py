@@ -59,6 +59,8 @@ class TestComprehensiveEndToEnd(unittest.TestCase):
     def _create_config_file(self, config_data, filename):
         """Helper to create a YAML config file."""
         config_path = os.path.join(self.test_dir, filename)
+        # Override sample size thresholds for tests — fixtures use small synthetic datasets
+        config_data.setdefault("min_sample_size_override", 100)
         with open(config_path, "w") as f:
             yaml.dump(config_data, f, default_flow_style=False)
         return config_path

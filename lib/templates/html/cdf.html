@@ -79,11 +79,35 @@
       labels: {{values}},
       datasets: [
 {% for dataset in datasets %}
+{% if dataset.cdf_lower %}
+      {
+          label: "_ci_lower_{{dataset.branch}}",
+          data: {{dataset.cdf_lower}},
+          borderWidth: 0,
+          pointRadius: 0,
+          fill: '+1',
+          backgroundColor: "{{dataset.band_color}}",
+          tension: 0.4
+      },
+{% endif %}
       {
           label: "{{dataset.branch}}",
           data: {{dataset.cdf}},
-          borderWidth: 2
+          borderWidth: 2,
+          borderColor: "{{dataset.line_color}}",
+          backgroundColor: "{{dataset.line_color}}"
       },
+{% if dataset.cdf_upper %}
+      {
+          label: "_ci_upper_{{dataset.branch}}",
+          data: {{dataset.cdf_upper}},
+          borderWidth: 0,
+          pointRadius: 0,
+          fill: false,
+          backgroundColor: 'transparent',
+          tension: 0.4
+      },
+{% endif %}
 {% endfor %}
       ]
   };
@@ -162,6 +186,9 @@
           legend: {
               display: true,
               position: 'top',
+              labels: {
+                  filter: function(item) { return !item.text.startsWith('_ci_'); }
+              }
             },
           title: {
               display: true,

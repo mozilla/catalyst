@@ -1,3 +1,5 @@
+import copy
+import re
 import unittest
 from lib.report import ReportGenerator
 from lib.generate import setupDjango
@@ -328,6 +330,45 @@ class TestHTMLReportGeneration(unittest.TestCase):
         self.assertGreater(
             len(numerical_sections), 0, "Should still have numerical metric sections"
         )
+
+    def test_significance_column_follows_bootstrap_flag(self):
+        """Flag off shows the MWU verdict; flag on shows the lift CI verdict."""
+        for enabled, expected in ((False, "None (p=0.01)"), (True, "> median <")):
+            data = copy.deepcopy(self.test_data)
+            data["input"]["enable_bootstrap_ci"] = enabled
+            fcp = data["treatment"]["Windows"]["numerical"]["fcp_time"]
+            fcp["tests"] = {"mwu": {"score": 0, "p-value": 0.01, "effect": 0.2}}
+            fcp["median_lift_ci"] = {"lower": 0.01, "upper": 0.05}
+            html = " ".join(ReportGenerator(data).createHTMLReport().split())
+            self.assertIn(expected, html)
+
+    def test_pageload_events_not_colored_flag_on(self):
+        """Pageload CIs cluster by document_id, so flag on never colors them;
+        flag off and non-pageload metrics are untouched."""
+        for enabled, pageload, colored in (
+            (True, True, False),
+            (True, False, True),
+            (False, True, True),
+        ):
+            data = copy.deepcopy(self.test_data)
+            data["input"]["enable_bootstrap_ci"] = enabled
+            data["input"]["pageload_event_metrics"] = (
+                {"fcp_time": {}} if pageload else {}
+            )
+            fcp = data["treatment"]["Windows"]["numerical"]["fcp_time"]
+            fcp["median"] = fcp["median"] * 3
+            fcp["tests"] = {"mwu": {"score": 0, "p-value": 0.0001, "effect": 0.5}}
+            fcp["median_lift_ci"] = {"lower": 0.5, "upper": 0.9}
+            html = " ".join(ReportGenerator(data).createHTMLReport().split())
+            # The summary cell for fcp_time's +189.7% median uplift.
+            style = re.search(r'<div style="([^"]*)">\s*\+189\.7', html)
+            self.assertIsNotNone(style, (enabled, pageload))
+            self.assertEqual(
+                "color:" in style.group(1), colored, (enabled, pageload, style.group(1))
+            )
+            self.assertEqual(
+                "Not assessed" in html, enabled and pageload, (enabled, pageload)
+            )
 
 
 if __name__ == "__main__":
